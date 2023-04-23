@@ -1,7 +1,7 @@
 .section .text.entry
 
-    .global kernal_entry
-kernal_entry:
+    .global kernel_entry
+kernel_entry:
     la sp,boot_stack_top
     tail main
    

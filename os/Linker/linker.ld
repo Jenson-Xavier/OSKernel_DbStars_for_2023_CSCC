@@ -1,5 +1,5 @@
 OUTPUT_ARCH(riscv) 
-ENTRY(kernal_entry)  
+ENTRY(kernel_entry)  
 
 . = 0x80200000;
 
