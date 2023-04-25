@@ -36,6 +36,8 @@ int main()
     kout[red] << "interrupt_enable" << endl;
     interrupt_enable();
 
+    kout<<64<<' '<<KOUT::hex(64ull)<<' '<<KOUT::hex((uint32)128);
+
     while (1)
     {
         delay(100);
