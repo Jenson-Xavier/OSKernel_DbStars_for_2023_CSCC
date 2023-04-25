@@ -4,6 +4,7 @@
 #include <clock.hpp>
 #include <Riscv.h>
 #include <interrupt.hpp>
+#include <pmm.hpp>
 
 int main()
 {
@@ -35,8 +36,8 @@ int main()
     trap_init();
     kout[red] << "interrupt_enable" << endl;
     interrupt_enable();
+    pmm.Init();
 
-    kout<<64<<' '<<KOUT::hex(64ull)<<' '<<KOUT::hex((uint32)128);
 
     while (1)
     {

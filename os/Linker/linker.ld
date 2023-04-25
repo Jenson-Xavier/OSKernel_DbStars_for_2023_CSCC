@@ -38,7 +38,7 @@ SECTIONS
 
     . = ALIGN(0x1000);
 
-    PROVIDE(space_start = .);
+    PROVIDE(kernel_end = .);
 
     /DISCARD/ : {
         *(.eh_frame .note.GNU-stack)

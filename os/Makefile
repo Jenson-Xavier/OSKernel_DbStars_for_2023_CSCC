@@ -1,5 +1,5 @@
-Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf
-	riscv64-unknown-elf-ld -o Build/kernel.elf -T Linker/linker.ld Build/main.elf Build/start.elf Build/kout.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf
+Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf
+	riscv64-unknown-elf-ld -o Build/kernel.elf -T Linker/linker.ld Build/main.elf Build/start.elf Build/kout.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf
 
 #kernel
 Build/start.elf:kernel/boot/start.S
@@ -23,6 +23,11 @@ Build/clock.elf:kernel/trap/clock.cpp
 
 Build/interrupt.elf:kernel/trap/interrupt.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/interrupt.cpp -o Build/interrupt.elf -I"kernel/include" -mcmodel=medany
+
+#memory
+Build/pmm.elf:kernel/memory/pmm.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/pmm.cpp -o Build/pmm.elf -I"kernel/include" -mcmodel=medany
+
 
 
 clean:
