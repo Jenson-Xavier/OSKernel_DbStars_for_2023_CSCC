@@ -16,19 +16,14 @@ int main()
     uint32 xu32 = 123456789;
     uint16 xu16 = 12345;
     uint8 xu8 = 123;
-    int64 x64 = -12345678987654321;
-    int32 x32 = -123456789;
-    int16 x16 = -12345;
-    int8 x8 = -123;
-    kout.hex(xu64) << endl;
-    kout.hex(xu32) << endl;
-    kout.hex(xu16) << endl;
-    kout.hex(xu8) << endl;
-    kout.hex(x64) << endl;
-    kout.hex(x32) << endl;
-    kout.hex(x16) << endl;
-    kout.hex(x8) << endl;
+    kout << Hex(xu64) << endl;
+    kout << Hex(xu32) << endl;
+    kout << Hex(xu16) << endl;
+    kout << Hex(xu8) << endl;
     */
+    //test memory
+    uint32 arr[] = { 1456467546, 2465464845, 345646546, 465454688, 546841385 };
+    kout << Memory(arr, arr + 5, 4);
 
     kout[red] << "clock_init" << endl;
     clock_init();
@@ -44,6 +39,6 @@ int main()
         delay(100);
         kout << '*';
     }
-    
+
     return 0;
 }

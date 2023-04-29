@@ -3,7 +3,7 @@
 
 void PMM::Init(uint64 _start, uint64 _end)
 {
-    all_pages = (PAGE *)_start;
+    all_pages = (PAGE*)_start;
     page_num = (_end - _start) / PAGESIZE;
 
     // 头节点设置
@@ -28,21 +28,21 @@ void PMM::Init(uint64 _start, uint64 _end)
     show(&page_free);
 }
 
-void PMM::show(PAGE *pages)
+void PMM::show(PAGE* pages)
 {
     while (pages->next != -1)
     {
-        pages=&all_pages[pages->next];
+        pages = &all_pages[pages->next];
         kout << "addr " << pages->addr << endl;
         kout << "num  " << pages->num << endl;
         kout << "ID   " << pages->ID << endl;
         kout << "next " << pages->next << endl
-             << endl;
-        
+            << endl;
+
     }
 }
 
-PAGE *PMM::alloc_pages(uint64 num)
+PAGE* PMM::alloc_pages(uint64 num)
 {
 }
 

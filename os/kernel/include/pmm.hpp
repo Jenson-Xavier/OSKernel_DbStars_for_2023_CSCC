@@ -26,24 +26,24 @@ extern"C"
 class PMM//双链表实现最优分配
 {
 
-//|====qemu=====|=====kernel===|==pmm==|===freepage==|
-//pmm部分是数组实现的双链表
+    //|====qemu=====|=====kernel===|==pmm==|===freepage==|
+    //pmm部分是数组实现的双链表
 private:
-PAGE  page_free;//头节点
-PAGE  page_used;
-PAGE * all_pages;
-uint64 page_num;
+    PAGE  page_free;//头节点
+    PAGE  page_used;
+    PAGE* all_pages;
+    uint64 page_num;
 
-void show(PAGE * pages);//显示链表中的内容
-bool insert_page(PAGE * src,PAGE *tar);//将tar插入src链表中
+    void show(PAGE* pages);//显示链表中的内容
+    bool insert_page(PAGE* src, PAGE* tar);//将tar插入src链表中
 
-    
+
 public:
-    void Init(uint64 _start=(uint64)kernel_end,uint64 _end=MEMORYEND);
-    PAGE * alloc_pages(uint64 num);
+    void Init(uint64 _start = (uint64)kernel_end, uint64 _end = MEMORYEND);
+    PAGE* alloc_pages(uint64 num);
     void  free_pages(uint64 num);
-    PAGE * get_page_from_addr(void * addr);
-    
+    PAGE* get_page_from_addr(void* addr);
+
 };
 
 
