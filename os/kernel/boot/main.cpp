@@ -34,6 +34,27 @@ int main()
     pmm.Init();
 
 
+    PAGE * a,*b,* c,*d,*e;
+    kout[yellow]<<1<<endl;
+    a=pmm.alloc_pages(2,1);
+
+
+    kout[yellow]<<2<<endl;
+    b=pmm.alloc_pages(2,1);
+
+
+    kout[yellow]<<3<<endl;
+    pmm.free_pages(a);
+
+
+    kout[yellow]<<4<<endl;
+    d=pmm.alloc_pages(3,1);
+
+
+    kout[yellow]<<5<<endl;
+    e=pmm.alloc_pages(2,1);
+
+
     while (1)
     {
         delay(100);

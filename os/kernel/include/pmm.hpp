@@ -10,10 +10,10 @@
 
 struct PAGE
 {
-    uint64  next;
-    int num;
+    PAGE * next;
+    PAGE * pre;
+    uint64 num;
     int ID;
-    uint64 addr;
 };
 
 extern"C"
@@ -33,6 +33,7 @@ private:
     PAGE  page_used;
     PAGE* all_pages;
     uint64 page_num;
+    uint64 end;
 
     void show(PAGE* pages);//显示链表中的内容
     bool insert_page(PAGE* src, PAGE* tar);//将tar插入src链表中
@@ -40,8 +41,8 @@ private:
 
 public:
     void Init(uint64 _start = (uint64)kernel_end, uint64 _end = MEMORYEND);
-    PAGE* alloc_pages(uint64 num);
-    void  free_pages(uint64 num);
+    PAGE* alloc_pages(uint64 num,int _ID);
+    bool  free_pages(PAGE * t);
     PAGE* get_page_from_addr(void* addr);
 
 };
