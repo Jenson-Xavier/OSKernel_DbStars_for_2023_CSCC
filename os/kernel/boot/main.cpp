@@ -55,13 +55,14 @@ int main()
     e = pmm.alloc_pages(2, 1);
     */
 
-    
+    /*
     //test kmalloc and kfree
     void* testaddr = kmalloc(64);
     kout << Memory(testaddr, (void*)(testaddr + 64)) << endl;
     kout << Hex((uint64)testaddr) << endl;
     kfree(testaddr);
-    
+    */
+
     
     while (1)
     {
