@@ -1,16 +1,15 @@
 #include <sbi.h>
 #include <kout.hpp>
+#include <kstring.hpp>
 #include <trap.hpp>
 #include <clock.hpp>
 #include <Riscv.h>
 #include <interrupt.hpp>
 #include <pmm.hpp>
+#include <process.hpp>
 
-int main()
+void test_outHex()
 {
-    kout << "hello world!" << "\n";
-
-    /*
     //test outHex
     uint64 xu64 = 123456789987654321;
     uint32 xu32 = 123456789;
@@ -20,23 +19,17 @@ int main()
     kout << Hex(xu32) << endl;
     kout << Hex(xu16) << endl;
     kout << Hex(xu8) << endl;
-    */
+}
 
-    /*
+void test_memory()
+{
     //test memory
     uint32 arr[] = { 1456467546, 2465464845, 345646546, 465454688, 546841385 };
     kout << Memory(arr, arr + 5, 4);
-    */
-    
-    kout[red] << "clock_init" << endl;
-    clock_init();
-    kout[red] << "trap_init" << endl;
-    trap_init();
-    kout[red] << "interrupt_enable" << endl;
-    interrupt_enable();
-    pmm.Init();
+}
 
-    /*
+void test_page_alloc()
+{
     //test page alloc
     PAGE* a, * b, * c, * d, * e;
     kout[yellow] << 1 << endl;
@@ -53,16 +46,43 @@ int main()
 
     kout[yellow] << 5 << endl;
     e = pmm.alloc_pages(2, 1);
-    */
+}
 
-    /*
+void test_kmalloc()
+{
     //test kmalloc and kfree
     void* testaddr = kmalloc(64);
     kout << Memory(testaddr, (void*)(testaddr + 64)) << endl;
     kout << Hex((uint64)testaddr) << endl;
     kfree(testaddr);
-    */
+}
 
+void test_kstring()
+{
+    int test_array[25];
+    //memset(test_array, 0, sizeof test_array);
+    for (int i = 0;i < 25;i++) {
+        kout << test_array[i] << ' ';
+    }
+}
+
+void test_process()
+{
+    
+}
+
+int main()
+{
+    kout << "hello world!" << "\n";
+    
+    kout[red] << "clock_init" << endl;
+    clock_init();
+    kout[red] << "trap_init" << endl;
+    trap_init();
+    kout[red] << "interrupt_enable" << endl;
+    interrupt_enable();
+    pmm.Init();
+    pm.Init();
     
     while (1)
     {
