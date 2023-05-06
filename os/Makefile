@@ -1,5 +1,5 @@
-Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/process.elf
-	riscv64-unknown-elf-ld -o Build/kernel.elf -T Linker/linker.ld Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/process.elf
+Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/process.elf Build/Process.elf
+	riscv64-unknown-elf-ld -o Build/kernel.elf -T Linker/linker.ld Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/process.elf Build/Process.elf
 
 #kernel
 Build/start.elf:kernel/boot/start.S
@@ -35,6 +35,8 @@ Build/pmm.elf:kernel/memory/pmm.cpp
 Build/process.elf:kernel/process/process.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/process.cpp -o Build/process.elf -I"kernel/include" -mcmodel=medany
 
+Build/Process.elf:kernel/process/Process.S
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Process.elf -I"kernel/include" -mcmodel=medany
 clean:
 	rm Build/*
 

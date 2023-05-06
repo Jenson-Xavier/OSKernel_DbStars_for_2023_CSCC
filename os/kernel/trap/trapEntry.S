@@ -92,10 +92,10 @@ trap_entry:
 	.globl trap_entry
 	SAVE_ALL
 	move  a0, sp
-	jal trap
-	move  sp, a0
+	jal trap				# trap入口 RISCV统一的中断异常处理入口
+	move  sp, a0			# trap的返回值TRAPFRAME指针放在a0 move到sp
 	
 TrapRet:
 	.globl TrapRet
-	RESTORE_ALL
-	sret
+	RESTORE_ALL				# 从sp位置将保存的TRAPFRAME保存到相应的寄存器
+	sret					# sret返回到正常的执行流 根据硬件设计逻辑 这一步会跳转到epc存放的指令地址执行

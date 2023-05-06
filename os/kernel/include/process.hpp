@@ -6,6 +6,7 @@
 #include <type.hpp>
 #include <pmm.hpp>
 #include <trap.hpp>
+#include <clock.hpp>
 
 #define KERNELSTACKSIZE      4096
 
@@ -16,7 +17,7 @@
 // 采取六个状态来实现
 enum proc_status
 {
-    Proc_allocated = 0,     // 分配态 表示一个刚刚分配好内存的进程 还没有进行相关初始化 
+    Proc_allocated = 0,     // 分配态 表示一个刚刚分配好内存的进程 还没有进行相关初始化(uninit) 
     Proc_ready,             // 就绪态 表示当前进程完成了初始化任务
     Proc_running,           // 执行态 表示当前进程正在执行
     Proc_sleeping,          // 挂起/等待态 表示进程因为中断或异常等由执行态挂起进入等待重新分配资源
@@ -24,6 +25,8 @@ enum proc_status
     Proc_zombie,            // 僵死态 表示进程已经终止但是进程表还有相关的结构和资源
 };
 
+// 后续为了更好地管理和隔离 使设计结构清晰化 摒弃这样的轻量级上下文的设计
+// 而是利用中断trap进行进程上下文的恢复和处理 直接使用trapframe结构体即可
 // 进程上下文 参考ucore设计 利用函数调用规则仅用14个寄存器实现进程上下文的保存
 struct reg_context
 {
@@ -46,6 +49,8 @@ struct reg_context
 extern "C"
 {
     extern char boot_stack[];
+    extern char boot_stack_top[];
+    extern char KernelProcessEntry[];
 };
 
 #define PROC_NAME_LEN   50      // 进程名字的最大长度 待完成完善字符串处理函数后继续实现
@@ -56,13 +61,14 @@ extern "C"
 struct proc_struct
 {
     proc_struct* next;          // 统一方便进程链表的维护 因为总进程数量不会太大 使用单链表结构
-    enum proc_status stat;      // 进程状态
+    uint32 stat;                // 进程状态
     int pid;                    // 进程号标识符
-    
-    // ... 调度信息 进程切换和进程调度需要
-    // ... 其实这里是和时间有关的部分 在后面进程调度时再补充
-    //int64 runtime;            //  进程运行的时间
-    
+
+    clock_t timebase;           // Round Robin时间片轮转调度实现需要 计时起点
+    clock_t runtime;            // 进程运行的时间
+    clock_t sleeptime;          // 挂起态等待时间
+    clock_t readytime;          // 就绪态等待时间
+
     int ku_flag;                // flag标志是内核级还是用户级进程
     
     void* kstack;               // 内核栈地址
@@ -74,8 +80,9 @@ struct proc_struct
     int pid_bro_next;           // 到兄弟进程 next方向
     int pid_fir_child;          // 到第一个孩子进程
     
-    reg_context context;        // 轻量级上下文
-    
+    // reg_context context;     // 轻量级上下文 弃用...
+    TRAPFRAME* context;         // 利用trapframe结构进行进程上下文的处理 更加清晰和统一 其直接分配在内核栈上
+
     // ... 虚拟内存管理部分 以及地址空间 扩展用户进程
     
     char name[PROC_NAME_LEN];   // 进程名称 后续有需求再完善字符串处理函数
@@ -93,22 +100,25 @@ extern struct proc_struct* idle_proc;
 class ProcessManager
 {
 protected:
-    static proc_struct proc_listhead;                       // 进程链表头节点
-    static proc_struct* cur_proc;                           // 当前正在执行的进程
-    static uint32 proc_count;                               // 存在的进程数量
-    static void add_proc_tolist(proc_struct* proc);         // 将分配好的进程加入进程链表
-    static bool remove_proc_fromlist(proc_struct* proc);    // 将已经加入进程链表的进程移除
+    proc_struct proc_listhead;                              // 进程链表头节点
+    proc_struct* cur_proc;                                  // 当前正在执行的进程
+    uint32 proc_count;                                      // 存在的进程数量
+    void add_proc_tolist(proc_struct* proc);                // 将分配好的进程加入进程链表
+    bool remove_proc_fromlist(proc_struct* proc);           // 将已经加入进程链表的进程移除
+    void init_idleproc_for_boot();                  // 创建并初始化第0个idle进程 相当于boot进程
+    int finish_proc(proc_struct* proc);             // 结束一个进程 释放其所属的资源 这里最好有对应的退出码设置
 
 public:
     // PM类自身相关的操作
     void Init();                                    // PM类初始化函数
-
+    void show(proc_struct* proc);                   // 打印一个proc结构相关信息 用于调试
+    void print_all_list();                          // 打印进程链表所有进程节点信息 便于调试
+    
     proc_struct* alloc_proc();                      // 管理分配一个新进程
     int get_unique_pid();                           // 得到一个独特的pid用来分配
     bool init_proc(proc_struct* proc, int ku_flag); // 初始化一个进程
     proc_struct* get_proc(int pid);                 // 从进程号pid得到一个进程实例
     bool free_proc(proc_struct* proc);              // 释放一个以及分配的进程的资源和空间
-    void init_idleproc_for_boot();                  // 创建并初始化第0个idle进程 相当于boot进程
     
     inline proc_struct* get_cur_proc()              // 获取当前正在执行的进程实例
     {
@@ -120,7 +130,7 @@ public:
         return proc_count;
     }
 
-    void proc_schedule();                           // 进行进程调度的关键函数 主要是时间片轮转
+    TRAPFRAME* proc_scheduler(TRAPFRAME* context);   // 进行进程调度的关键函数 主要是时间片轮转 trap实现 故这里的返回值如此设置
 
     // PM类管理proc_struct相关的操作
 
@@ -128,10 +138,9 @@ public:
     bool set_proc_name(proc_struct* proc, char* name);                      // 设置一个进程的名称
     bool set_proc_kstk(proc_struct* proc, void* kaddr, uint32 size);        // 设置进程内核栈
     bool copy_otherprocs(proc_struct* dst, proc_struct* src);               // 进程间的拷贝
-    bool run_proc(proc_struct* proc);               // 执行一个进程
-    int finish_proc(proc_struct* proc);             // 结束一个进程 释放其所属的资源 这里最好有对应的退出码设置
+    bool run_proc(proc_struct* proc);                                       // 执行一个进程
     bool start_kernel_proc(proc_struct* proc,
-        int (*func)(void*), void* arg);             // 通过给定的函数启动内核线程 用户级后续
+        int (*func)(void*), void* arg);             // 通过给定的函数启动内核线程
     
     // ... 进程调度和切换需相关函数
 
@@ -139,6 +148,9 @@ public:
 
     // ... 虚拟内存管理 堆栈区域管理相关 涉及用户进程
 };
+
+// 创建内核进程的通用全局函数
+proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name);
 
 extern ProcessManager pm;
 

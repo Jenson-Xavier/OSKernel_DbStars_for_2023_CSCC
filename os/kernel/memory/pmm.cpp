@@ -25,11 +25,13 @@ void PMM::Init(uint64 _start, uint64 _end)
     all_pages[page_used.next->num].pre = &page_free;
     all_pages[page_used.next->num].num = page_num - page_used.next->num;
 
-    kout[green] << "PMM_init success" << endl;
+    kout[green] << "PMM_init Success!" << endl;
+    /*
     kout[green] << "page_used" << endl;
     show(&page_used); // test need
     kout[green] << "page_free" << endl;
     show(&page_free);
+    */
 }
 
 void PMM::show(PAGE* pages)
@@ -81,10 +83,13 @@ PAGE* PMM::alloc_pages(uint64 num, int _ID)
 
             if (insert_page(&page_used, t))
             {
+                /*
+                // test show
                 show(&page_used);
                 kout << "-------" << endl;
                 show(&page_free);
                 kout[green] << "alloc memory success" << endl;
+                */
                 return t;
             }
             else
@@ -151,10 +156,13 @@ bool PMM::free_pages(PAGE* t)
 
         page_used.num--;
 
+        /*
+        // test show
         show(&page_used);
         kout << "-------" << endl;
         show(&page_free);
         kout[green] << "free page success" << endl;
+        */
         return true;
     }
     else

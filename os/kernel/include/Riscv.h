@@ -189,6 +189,10 @@
 
 #define PTE_TABLE(PTE) (((PTE) & (PTE_V | PTE_R | PTE_W | PTE_X)) == PTE_V)
 
+// 为了编码提示方便 开发时在这里认为define __riscv
+// 实际编译运行时再记得删除
+#define __riscv
+
 #ifdef __riscv
 
 #if __riscv_xlen == 64
@@ -207,21 +211,26 @@
 
 #ifdef __GNUC__
 
+// 读CSR寄存器 汇编宏
 #define read_csr(reg) ({ unsigned long __tmp; \
   asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \
   __tmp; })
 
+// 写CSR寄存器　汇编宏
 #define write_csr(reg, val) ({ \
   asm volatile ("csrw " #reg ", %0" :: "rK"(val)); })
 
+// 读写SCR寄存器 汇编宏 相当于先读再写CSR寄存器
 #define swap_csr(reg, val) ({ unsigned long __tmp; \
   asm volatile ("csrrw %0, " #reg ", %1" : "=r"(__tmp) : "rK"(val)); \
   __tmp; })
 
+// 设置CSR寄存器状态　汇编宏　读CSR后与bit按位或
 #define set_csr(reg, bit) ({ unsigned long __tmp; \
   asm volatile ("csrrs %0, " #reg ", %1" : "=r"(__tmp) : "rK"(bit)); \
   __tmp; })
 
+// 清除CSR寄存器状态 汇编宏 读CSR后与!bit按位或
 #define clear_csr(reg, bit) ({ unsigned long __tmp; \
   asm volatile ("csrrc %0, " #reg ", %1" : "=r"(__tmp) : "rK"(bit)); \
   __tmp; })
