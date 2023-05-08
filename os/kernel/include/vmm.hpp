@@ -3,6 +3,8 @@
 
 #include <type.hpp>
 #include <pmm.hpp>
+#include <kstring.hpp>
+#include <kout.hpp>
 
 
 #define PhysiclaVirtualMemoryOffset 0xffffffff00000000
@@ -10,9 +12,10 @@
 
 
 class PAGETABLE;
+union ENTRY;
 extern "C"
 {
-    ENTRY boot_sv39_page_table[];
+    extern ENTRY boot_sv39_page_table[];
 }
 
 union ENTRY
@@ -38,6 +41,17 @@ union ENTRY
     {
         return X+R+W;
     }
+    inline PAGETABLE * get_next_page()
+    {
+        if(is_leaf())
+        {
+            return nullptr;
+        }
+        else
+        {
+            return (PAGETABLE *)((get_PNN()<<0x12)+PhysiclaVirtualMemoryOffset);
+        }
+    }
 };
 
 class PAGETABLE
@@ -47,8 +61,9 @@ private:
     uint8 level;
     bool IsKernelTable;//判断页表是否在内核区
 public:
-    PAGETABLE(uint64 addr,bool _IsKernelTable);
-    ~PAGETABLE();
+    bool Init(uint8 _level,bool _IsKernelTable);
+    bool Destroy();
+    void show();
 };
 
 #endif
