@@ -8,6 +8,7 @@
 // 默认物理内存大小是128MB 当然也是可以指定的 这里采取默认实现
 #define MEMORYSIZE 0x08000000 
 #define MEMORYEND  0x88000000
+#define PVOffset   0xffffffff00000000
 // pagesize页大小为0x1000B 即4096B 即4KB标准sv39页大小
 #define PAGESIZE   0x1000
 #include <type.hpp>
@@ -19,7 +20,6 @@ struct PAGE
     PAGE* next;
     PAGE* pre;
     uint64 num;
-    int ID;
 };
 
 extern "C"
@@ -51,8 +51,8 @@ private:
 
 
 public:
-    void Init(uint64 _start = (uint64)kernel_end, uint64 _end = MEMORYEND);
-    PAGE* alloc_pages(uint64 num, int _ID);
+    void Init(uint64 _start = (uint64)kernel_end, uint64 _end = MEMORYEND+PVOffset);
+    PAGE* alloc_pages(uint64 num);
     bool  free_pages(PAGE* t);
     PAGE* get_page_from_addr(void* addr);
 
@@ -62,7 +62,7 @@ public:
 
     // 传参为需要分配的字节数 第二个默认参数为了适配页分配的_ID 基本不会使用
     // 其返回的参数就是实际内存块中的物理地址
-    void* malloc(uint64 bytesize, int32 _id = 1);
+    void* malloc(uint64 bytesize);
     void free(void* freeaddress);
 };
 
@@ -70,9 +70,9 @@ public:
 extern PMM pmm;
 
 //声明作为标准库通用的内存分配函数
-inline void* kmalloc(uint64 bytesize, int32 _id = 1)
+inline void* kmalloc(uint64 bytesize)
 {
-    return pmm.malloc(bytesize, _id);
+    return pmm.malloc(bytesize);
 }
 
 inline void kfree(void* freeaddress)

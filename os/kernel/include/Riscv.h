@@ -191,7 +191,9 @@
 
 // 为了编码提示方便 开发时在这里认为define __riscv
 // 实际编译运行时再记得删除
+#ifndef __riscv
 #define __riscv
+#endif
 
 #ifdef __riscv
 
