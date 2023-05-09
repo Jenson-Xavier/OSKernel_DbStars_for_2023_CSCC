@@ -6,6 +6,7 @@
 #include <Riscv.h>
 #include <interrupt.hpp>
 #include <pmm.hpp>
+#include <vmm.hpp>
 #include <process.hpp>
 
 void test_outHex()
@@ -34,7 +35,6 @@ void test_page_alloc()
     PAGE *a, *b, *c, *d, *e;
     kout[yellow] << 1 << endl;
     a = pmm.alloc_pages(2);
-    
 
     kout[yellow] << 2 << endl;
     b = pmm.alloc_pages(2);
@@ -127,9 +127,55 @@ void test_process2()
     CreateKernelProcess(func, (void *)"(((UVWXYZ((())ST))", (char *)"test3");
 }
 
+void test_pageTable()
+{
+    PAGETABLE * A,*B;
+    A=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    kout[yellow]<<1<<endl;
+    A->Init(1);
+    A->show();
+    A->Destroy();
+
+
+    kout[yellow]<<2<<endl;
+    A=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    A->Init(0);
+    A->show();
+    A->Destroy();
+
+
+    kout[yellow]<<3<<endl;
+    A=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    B=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    A->Init(0);
+    B->Init();
+    A->getEntry(3)=ENTRY::arr_to_ENTRY(P2KAddr(&B[0]));
+    A->show();
+    A->Destroy();
+}
+
+void test_VMS()
+{
+    VMS::Static_Init();
+    VMS::GetKernelVMS()->show();
+    VMS a;
+    a.Init();
+    VMR  A,B;
+    A.Init(0x123,0x456,7);
+    B.Init(0x456,0x789,7);
+    a.insert(&A);
+    a.insert(&B);
+    a.show();
+    kout<<"-----"<<endl;
+    a.del(&A);
+    a.show();
+
+}
+
+
 int main()
 {
-    kout[purple] << "Hello World,OS Kernel!" << endl;
+    kout[purple] << "Hello World,OS Kernel!!" << endl;
     kout << endl;
 
     kout[red] << "clock_init!" << endl;
@@ -143,7 +189,8 @@ int main()
     pmm.Init();
     pm.Init();
 
-    test_page_alloc();
+    //  test_page_alloc();
+    test_VMS();
 
     while (1)
     {

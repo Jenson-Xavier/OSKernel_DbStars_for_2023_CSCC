@@ -6,6 +6,7 @@
 // QEMU模拟的物理内存地址从0x0到0x80000000处都是QEMU部分
 // DRAM可分配的物理内存就是从0x80000000到0x88000000部分
 // 默认物理内存大小是128MB 当然也是可以指定的 这里采取默认实现
+#define MEMORYSTART 0x80200000
 #define MEMORYSIZE 0x08000000 
 #define MEMORYEND  0x88000000
 #define PVOffset   0xffffffff00000000

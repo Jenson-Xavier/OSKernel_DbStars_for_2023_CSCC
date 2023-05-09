@@ -184,6 +184,7 @@ void* PMM::malloc(uint64 bytesize)
     }
     // 由于页分配实现的是返回页结构体指针 是个页表地址  
     // malloc实现的是返回成功分配后的内存起始地址
+    kout[green]<<"success malloc,addr:"<<KOUT::hex((uint64)(temppage - all_pages) * PAGESIZE + (uint64)all_pages)<<endl;
     return (void*)((uint64)(temppage - all_pages) * PAGESIZE + (uint64)all_pages);
 }
 
@@ -204,5 +205,7 @@ void PMM::free(void* freeaddress)
     // Free Success
     return;
 }
+
+
 
 PMM pmm;

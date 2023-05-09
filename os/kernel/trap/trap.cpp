@@ -3,6 +3,7 @@
 #include <Riscv.h>
 #include <kout.hpp>
 #include <process.hpp>
+#include <vmm.hpp>
 
 extern "C"
 {
@@ -99,6 +100,9 @@ extern "C"
             case CAUSE_HYPERVISOR_ECALL:
                 break;
             case CAUSE_MACHINE_ECALL:
+                break;
+            case CAUSE_STORE_PAGE_FAULT:
+                TrapFunc_PageFault(tf);
                 break;
             default:
                 break;
