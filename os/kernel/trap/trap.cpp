@@ -36,7 +36,7 @@ extern "C"
                 if (tickCount % 100 == 0)
                 {
                     tickCount = 0;
-                    // kout << '.';
+                    kout << '.';
                 }
                 set_next_tick();
 
@@ -102,6 +102,7 @@ extern "C"
             case CAUSE_MACHINE_ECALL:
                 break;
             case CAUSE_STORE_PAGE_FAULT:
+                kout[yellow]<<"PAFE_FAULT"<<endl;
                 TrapFunc_PageFault(tf);
                 break;
             default:

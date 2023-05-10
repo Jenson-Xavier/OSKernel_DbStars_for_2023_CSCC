@@ -100,8 +100,8 @@ bool VMS::Init()
     Head = nullptr;
     VMRCount = 0;
 
-    PDT=(PAGETABLE *)pmm.malloc(4096);
-    PDT ->Init(1);
+    PDT = (PAGETABLE *)pmm.malloc(4096);
+    PDT->Init(1);
 
     ShareCount = 0;
     return true;
@@ -131,6 +131,7 @@ void VMS::Enter()
     CurVMS = this;
     lcr3((uint64)PDT->PAddr());
     asm volatile("sfence.vma \n fence.i \n fence");
+    kout[yellow] << "Enter VMS" << endl;
 }
 
 bool VMS::del(bool (*p)(VMR *tar))
@@ -185,12 +186,12 @@ bool VMS::del(VMR *tar)
 
 VMR *VMS::find(void *addr)
 {
-    VMR *t=Head;
-    while (t!=nullptr)
+    VMR *t = Head;
+    while (t != nullptr)
     {
-        if(t->GetStart() <=(uint64)addr&&t->GetEnd()>(uint64)addr)
+        if (t->GetStart() <= (uint64)addr && t->GetEnd() > (uint64)addr)
             return t;
-        t=t->next;
+        t = t->next;
     }
     return nullptr;
 }
@@ -269,60 +270,60 @@ void VMS::show()
 
 bool VMS::SolvePageFault(TRAPFRAME *tf)
 {
-    VMR * t=find((void*)(tf->badvaddr));
-    if(t==nullptr)
+    VMR *t = find((void *)(tf->badvaddr));
+    if (t == nullptr)
     {
-        kout[red]<<"Invalid addr"<<endl;
+        kout[red] << "Invalid addr" << endl;
         return false;
     }
-    ENTRY &e2=PDT->getEntry(((tf->badvaddr>>12)>>(9*2))&511);
+
+    ENTRY &e2 = PDT->getEntry(((tf->badvaddr >> 12) >> (9 * 2)) & 511);
     PAGETABLE *p;
     if (!e2.V)
     {
-        p=(PAGETABLE *)pmm.malloc(4096); 
-        p->Init(); 
-        e2.V=1;
-        e2.W=0;
-        e2.R=0;
-        e2.X=0;
+        p = (PAGETABLE *)pmm.malloc(4096);
+        p->Init();
+        e2.set_PNN(p->PAddr());
+        kout[yellow]<<KOUT::hex(e2.get_PNN())<<endl;
+        e2.V = 1;
+        e2.W = 0;
+        e2.R = 0;
+        e2.X = 0;
     }
-    else
-        p=e2.get_next_page();
-    
+    p = e2.get_next_page();
 
-    ENTRY &e1=PDT->getEntry(((tf->badvaddr>>12)>>(9*1))&511);
+    ENTRY &e1 = p->getEntry(((tf->badvaddr >> 12) >> (9 * 1)) & 511);
     if (!e1.V)
     {
-        p=(PAGETABLE *)pmm.malloc(4096); 
-        p->Init(); 
-        e1.V=1;
-        e1.W=0;
-        e1.R=0;
-        e1.X=0;
+        p = (PAGETABLE *)pmm.malloc(4096);
+        p->Init();
+        e1.set_PNN(p->PAddr());
+        e1.V = 1;
+        e1.W = 0;
+        e1.R = 0;
+        e1.X = 0;
     }
-    else
-        p=e1.get_next_page();
- 
-    ENTRY &e0=PDT->getEntry((tf->badvaddr>>12)&511);
+    p = e1.get_next_page();
+
+    ENTRY &e0 = p->getEntry((tf->badvaddr >> 12) & 511);
     if (!e0.V)
     {
-        p=(PAGETABLE *)pmm.malloc(4096); 
-        p->Init(); 
-        e0.V=1;
-        e0.W=0;
-        e0.R=0;
-        e0.X=0;
+        p = (PAGETABLE *)pmm.malloc(4096);
+        e0.set_PNN(p->PAddr());
+        e0.V = 1;
+        e0.W = 1;
+        e0.R = 1;
+        e0.X = 1;
     }
     else
     {
-        kout[red]<<"page exeis but still error"<<endl;
+        kout[red] << "page exeis but still error" << endl;
         return false;
     }
- 
+
     asm volatile("sfence.vma \n fence.i \n fence");
     return true;
 }
-
 
 bool TrapFunc_PageFault(TRAPFRAME *tf)
 {

@@ -56,6 +56,10 @@ union ENTRY
     {
         return (page_table_entry << 10) >> 20;
     }
+    inline void set_PNN(void * page_PAddr)
+    {
+        page_table_entry=(((uint64)page_PAddr>>12)<<10)|(page_table_entry&((1<<10)-1));
+    }
     inline bool is_leaf()
     {
         return X + R + W;
@@ -178,6 +182,11 @@ public:
     inline static VMS *GetCurVMS()
     {
         return CurVMS;
+    }
+
+    inline PAGETABLE * GetPageTable()
+    {
+        return PDT;
     }
 
     void Enter(); // 将当前空间切换到该实例所表示的空间

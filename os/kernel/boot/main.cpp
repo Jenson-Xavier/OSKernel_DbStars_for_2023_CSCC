@@ -129,27 +129,25 @@ void test_process2()
 
 void test_pageTable()
 {
-    PAGETABLE * A,*B;
-    A=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
-    kout[yellow]<<1<<endl;
+    PAGETABLE *A, *B;
+    A = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    kout[yellow] << 1 << endl;
     A->Init(1);
     A->show();
     A->Destroy();
 
-
-    kout[yellow]<<2<<endl;
-    A=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    kout[yellow] << 2 << endl;
+    A = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
     A->Init(0);
     A->show();
     A->Destroy();
 
-
-    kout[yellow]<<3<<endl;
-    A=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
-    B=(PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    kout[yellow] << 3 << endl;
+    A = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    B = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
     A->Init(0);
     B->Init();
-    A->getEntry(3)=ENTRY::arr_to_ENTRY(P2KAddr(&B[0]));
+    A->getEntry(3) = ENTRY::arr_to_ENTRY(P2KAddr(&B[0]));
     A->show();
     A->Destroy();
 }
@@ -160,18 +158,39 @@ void test_VMS()
     VMS::GetKernelVMS()->show();
     VMS a;
     a.Init();
-    VMR  A,B;
-    A.Init(0x123,0x456,7);
-    B.Init(0x456,0x789,7);
+    VMR A, B;
+    A.Init(0x123, 0x456, 7);
+    B.Init(0x456, 0x789, 7);
     a.insert(&A);
     a.insert(&B);
     a.show();
-    kout<<"-----"<<endl;
+    kout << "-----" << endl;
     a.del(&A);
     a.show();
-
 }
 
+void test_Page_fault()
+{
+    VMS A;
+    A.Init();
+    VMR a;
+    a.Init(PAGESIZE, 512 * PAGESIZE, 7);
+    A.insert(&a);
+    A.show();
+    A.GetPageTable()->show();
+
+    A.Enter();
+    VMS::GetCurVMS()->show();
+
+    char *str = (char *)PAGESIZE;
+    strcpy(str,"hello");
+    // *str='1';
+    kout[yellow]<<1<<endl;
+
+    A.show();
+    A.GetPageTable()->show();
+    kout[green]<<str<<endl;
+}
 
 int main()
 {
@@ -190,7 +209,8 @@ int main()
     pm.Init();
 
     //  test_page_alloc();
-    test_VMS();
+    // test_VMS();x
+    test_Page_fault();
 
     while (1)
     {
