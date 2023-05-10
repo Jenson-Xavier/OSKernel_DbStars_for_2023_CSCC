@@ -3,7 +3,7 @@
 #include <Riscv.h>
 #include <kout.hpp>
 #include <process.hpp>
-#include <vmm.hpp>
+#include <memory.hpp>
 
 extern "C"
 {
@@ -36,16 +36,25 @@ extern "C"
                 if (tickCount % 100 == 0)
                 {
                     tickCount = 0;
-                    kout << '.';
+                    // kout << '.';
                 }
                 set_next_tick();
 
                 //用时钟中断来触发进程的调度
-                if (tickCount % 100 == 0)
+                if (tickCount % 100 == 0 || imme_schedule)
                 {
+                    // kout[green] << imme_schedule << endl;
                     // kout[yellow] << "cur_proc's pid is : " << pm.get_cur_proc()->pid << endl;
                     // kout[yellow] << "cur proc cnt is : " << pm.get_proc_count() << endl;
                     // 每100个时钟周期进行一次进程RR调度
+                    // 或者imme_schedule为真时立即调度切换进程实现同步原语下的进程调度
+                    if (tickCount % 100 != 0 && imme_schedule == 1)
+                    {
+                        // 为了防止因为imme_schedule进入调度导致每次时钟中断都会触发调度
+                        // 如果是因为imme_schedule进入的调度 立马置0
+                        // imme_schedule的逻辑暂时也就是单次触发的逻辑
+                        imme_schedule = 0;
+                    }
                     return pm.proc_scheduler(tf);
                 }
                 break;

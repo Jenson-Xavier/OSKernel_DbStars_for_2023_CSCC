@@ -1,15 +1,7 @@
 #include <kout.hpp>
+#include <kstring.hpp>
 
 KOUT kout;
-
-void puts(const char* str)
-{
-    while (*str)
-    {
-        sbi_putchar(*str);
-        str++;
-    }
-}
 
 KOUT& KOUT::operator<<(const char* str)
 {

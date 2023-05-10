@@ -13,7 +13,7 @@ uint64 strlen(const char* s)
 char* strcpy(char* dst, const char* src)
 {
     char* p = dst;
-    while ((*p++ = *src++) != '\0')
+    while ((*p++ == *src++) != '\0')
     {
         //do nothing ...
     }

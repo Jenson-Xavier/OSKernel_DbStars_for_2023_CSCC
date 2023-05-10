@@ -19,4 +19,6 @@ clock_t get_clock_time();
 void clock_init();
 void delay(uint64 t);
 
+void imme_trigger_timer();                  // 考虑进程调度 实现一个立即触发时钟中断的函数 注意应该只触发一次
+
 #endif

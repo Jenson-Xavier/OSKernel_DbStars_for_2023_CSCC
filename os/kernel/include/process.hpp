@@ -4,7 +4,7 @@
 // 初步实现进程管理 先构建起内核线程 进而构建其用户线程
 
 #include <type.hpp>
-#include <pmm.hpp>
+#include <memory.hpp>
 #include <trap.hpp>
 #include <clock.hpp>
 
@@ -66,8 +66,8 @@ struct proc_struct
 
     clock_t timebase;           // Round Robin时间片轮转调度实现需要 计时起点
     clock_t runtime;            // 进程运行的时间
-    clock_t sleeptime;          // 挂起态等待时间
-    clock_t readytime;          // 就绪态等待时间
+    clock_t sleeptime;          // 挂起态等待时间(保留设计 暂不使用)
+    clock_t readytime;          // 就绪态等待时间(保留设计 暂不使用)
 
     int ku_flag;                // flag标志是内核级还是用户级进程
     
@@ -95,6 +95,8 @@ struct proc_struct
 // 声明全局 OS第0个进程idle_proc
 extern struct proc_struct* idle_proc;
 
+// 声明一个立即调度的bool变量 用来触发立即调度实现同步原语 即阻塞或者立即执行的功能
+extern bool imme_schedule;
 
 // 进程管理和控制的类 也可认为是进程调度器
 class ProcessManager
@@ -131,7 +133,8 @@ public:
     }
 
     TRAPFRAME* proc_scheduler(TRAPFRAME* context);   // 进行进程调度的关键函数 主要是时间片轮转 trap实现 故这里的返回值如此设置
-
+    void imme_trigger_schedule();                    // 实现一个立即触发调度器 辅助且统一实现本OS设计下的进程调度模块
+        
     // PM类管理proc_struct相关的操作
 
     bool switchstat_proc(proc_struct* proc, uint32 tar_stat);               // 改变一个进程的状态

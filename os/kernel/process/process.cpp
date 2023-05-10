@@ -2,9 +2,13 @@
 #include <kout.hpp>
 #include <kstring.hpp>
 #include <Riscv.h>
+#include <interrupt.hpp>
 
 // 定义idle进程
 proc_struct* idle_proc = nullptr;
+
+// 定义初始化立即调度与否的变量
+bool imme_schedule = false;
 
 void ProcessManager::show(proc_struct* proc)
 {
@@ -503,6 +507,7 @@ extern "C"
 TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
 {
     // 进程调度器的核心功能 利用trap进行进程调度
+    // 调度器每次轮询时遇到需要回收的进程都会进行相应的回收
     
     if (cur_proc == nullptr)
     {
@@ -578,6 +583,26 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
     // 还没有返回 就是没有可调度进程
     kout[red] << "No Process to Schedule!" << endl;
     return nullptr;
+}
+
+void ProcessManager::imme_trigger_schedule()
+{
+    // 本质逻辑是基于调度器的设计
+    // 因此需要先打开中断
+    // 不过需要判断上一次中断的状态 如果是关闭的那么还需要恢复
+    bool need_back = false;
+    if (!is_intr_enable())
+    {
+        need_back = true;
+        interrupt_enable();
+    }
+    imme_schedule = 1;
+    imme_trigger_timer();
+    imme_schedule = 0;
+    if (need_back)
+    {
+        interrupt_disable();
+    }
 }
 
 proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name)

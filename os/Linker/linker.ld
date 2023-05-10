@@ -1,12 +1,11 @@
 OUTPUT_ARCH(riscv) 
 ENTRY(kernel_entry)  
 
-. = 0xffffffff80200000;
+. = 0x80200000;
 
 SECTIONS
 {
-    .text : AT(0x80200000)
-    {
+    .text : {
         *(.text.entry) 
         *(.text .stub .text.* .gnu.linkonce.t.*)
     }

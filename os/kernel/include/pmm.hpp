@@ -10,10 +10,10 @@
 #define MEMORYSIZE 0x08000000 
 #define MEMORYEND  0x88000000
 #define PVOffset   0xffffffff00000000
+
 // pagesize页大小为0x1000B 即4096B 即4KB标准sv39页大小
 #define PAGESIZE   0x1000
 #include <type.hpp>
-
 
 
 struct PAGE
@@ -27,8 +27,6 @@ extern "C"
 {
     extern char kernel_end[];
 };
-
-
 
 // 双链表实现最优分配
 class PMM
@@ -52,7 +50,7 @@ private:
 
 
 public:
-    void Init(uint64 _start = (uint64)kernel_end, uint64 _end = MEMORYEND+PVOffset);
+    void Init(uint64 _start = (uint64)kernel_end, uint64 _end = MEMORYEND + PVOffset);
     PAGE* alloc_pages(uint64 num);
     bool  free_pages(PAGE* t);
     PAGE* get_page_from_addr(void* addr);
@@ -66,7 +64,6 @@ public:
     void* malloc(uint64 bytesize);
     void free(void* freeaddress);
 };
-
 
 extern PMM pmm;
 

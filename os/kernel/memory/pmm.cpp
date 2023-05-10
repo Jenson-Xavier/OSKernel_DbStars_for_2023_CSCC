@@ -56,7 +56,9 @@ PAGE* PMM::alloc_pages(uint64 num)
             {
                 f->next = t->next;
                 if (t->next != nullptr)
+                {
                     t->next->pre = f;
+                }
                 page_free.num--;
             }
             else
@@ -79,6 +81,7 @@ PAGE* PMM::alloc_pages(uint64 num)
                 // kout << "-------" << endl;
                 // show(&page_free);
                 // kout[green] << "alloc memory success" << endl;
+
                 return t;
             }
             else
@@ -87,7 +90,6 @@ PAGE* PMM::alloc_pages(uint64 num)
                 return nullptr;
             }
         }
-
         f = f->next;
     }
     kout[red] << "alloc memory error" << endl;
@@ -105,7 +107,9 @@ bool PMM::insert_page(PAGE* src, PAGE* tar)
             tar->pre = src;
             src->next = tar;
             if (tar->next != nullptr)
+            {
                 tar->next->pre = tar;
+            }
             return true;
         }
 
@@ -128,17 +132,21 @@ bool PMM::free_pages(PAGE* t)
     }
     if (insert_page(&page_free, t))
     {
-        if ((t->pre->num) + (t->pre) == t && t->pre!=&page_free)
+        if ((t->pre->num) + (t->pre) == t && t->pre != &page_free)
         {
             if (t->next)
+            {
                 t->next->pre = t->pre;
+            }
             t->pre->next = t->next;
             t->pre->num = t->pre->num + t->num;
         }
         else if (t->next != nullptr && t->num + t == t->next)
         {
             if (t->next->next)
+            {
                 t->next->next->pre = t;
+            }
             t->num = t->num + t->next->num;
             t->next = t->next->next;
         }
@@ -150,6 +158,7 @@ bool PMM::free_pages(PAGE* t)
         // kout << "-------" << endl;
         // show(&page_free);
         // kout[green] << "free page success" << endl;
+
         return true;
     }
     else
@@ -184,7 +193,7 @@ void* PMM::malloc(uint64 bytesize)
     }
     // 由于页分配实现的是返回页结构体指针 是个页表地址  
     // malloc实现的是返回成功分配后的内存起始地址
-    kout[green]<<"success malloc,addr:"<<KOUT::hex((uint64)(temppage - all_pages) * PAGESIZE + (uint64)all_pages)<<endl;
+    // kout[green] << "success malloc,addr:" << KOUT::hex((uint64)(temppage - all_pages) * PAGESIZE + (uint64)all_pages) << endl;
     return (void*)((uint64)(temppage - all_pages) * PAGESIZE + (uint64)all_pages);
 }
 
@@ -205,7 +214,5 @@ void PMM::free(void* freeaddress)
     // Free Success
     return;
 }
-
-
 
 PMM pmm;

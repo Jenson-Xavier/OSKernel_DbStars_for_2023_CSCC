@@ -1,4 +1,4 @@
-Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/vmm.elf Build/process.elf Build/Process.elf
+Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/vmm.elf Build/process.elf Build/Process.elf Build/spinlock.elf Build/mutex.elf Build/semaphore.elf
 	riscv64-unknown-elf-ld -o Build/kernel.elf -T Linker/linker.ld \
 	Build/main.elf \
 	Build/start.elf \
@@ -11,8 +11,10 @@ Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/kstring.e
 	Build/pmm.elf \
 	Build/vmm.elf \
 	Build/process.elf \
-	Build/Process.elf
-																	
+	Build/Process.elf \
+	Build/spinlock.elf \
+	Build/mutex.elf \
+	Build/semaphore.elf
 
 #kernel
 Build/start.elf:kernel/boot/start.S
@@ -43,6 +45,7 @@ Build/interrupt.elf:kernel/trap/interrupt.cpp
 #memory
 Build/pmm.elf:kernel/memory/pmm.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/pmm.cpp -o Build/pmm.elf -I"kernel/include" -mcmodel=medany
+
 Build/vmm.elf:kernel/memory/vmm.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/vmm.cpp -o Build/vmm.elf -I"kernel/include" -mcmodel=medany
 
@@ -52,6 +55,17 @@ Build/process.elf:kernel/process/process.cpp
 
 Build/Process.elf:kernel/process/Process.S
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Process.elf -I"kernel/include" -mcmodel=medany
+
+#synchronize
+Build/spinlock.elf:kernel/synchronize/spinlock.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/spinlock.cpp -o Build/spinlock.elf -I"kernel/include" -mcmodel=medany
+
+Build/mutex.elf:kernel/synchronize/mutex.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/mutex.cpp -o Build/mutex.elf -I"kernel/include" -mcmodel=medany
+
+Build/semaphore.elf:kernel/synchronize/semaphore.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/semaphore.cpp -o Build/semaphore.elf -I"kernel/include" -mcmodel=medany
+
 clean:
 	rm Build/*
 

@@ -1,21 +1,25 @@
 #include <vmm.hpp>
 
-VMS *VMS::KernelVMS = nullptr,
-    *VMS::CurVMS = nullptr;
+VMS* VMS::KernelVMS = nullptr;
+VMS* VMS::CurVMS = nullptr;
 
 bool PAGETABLE::Init(bool isRoot)
 {
     if (isRoot)
-        memcpy(entries, (char *)boot_sv39_page_table, sizeof(ENTRY) * ENTRYCOUNT);
+    {
+        memcpy(entries, (char*)boot_sv39_page_table, sizeof(ENTRY) * ENTRYCOUNT);
+    }
     else
+    {
         memset(entries, uint8(0), sizeof(ENTRY) * ENTRYCOUNT);
+    }
     return true;
 }
 
 bool PAGETABLE::Destroy()
 {
 
-    if (this == (void *)boot_sv39_page_table)
+    if (this == (void*)boot_sv39_page_table)
     {
         kout[red] << "can't Destroy Kernel PageTable" << endl;
         return false;
@@ -30,7 +34,9 @@ bool PAGETABLE::Destroy()
                 pmm.free(entries[i].get_next_page());
             }
             else
+            {
                 entries[i].get_next_page()->Destroy();
+            }
         }
         pmm.free(entries);
     }
@@ -80,6 +86,7 @@ void PAGETABLE::show()
 //         }
 //     }
 // }
+
 bool PAGETABLE::del(uint64 start, uint64 end, uint8 level)
 {
     return true;
@@ -100,14 +107,14 @@ bool VMS::Init()
     Head = nullptr;
     VMRCount = 0;
 
-    PDT = (PAGETABLE *)pmm.malloc(4096);
+    PDT = (PAGETABLE*)pmm.malloc(4096);
     PDT->Init(1);
 
     ShareCount = 0;
     return true;
 }
 
-void VMS::insert(VMR *tar)
+void VMS::insert(VMR* tar)
 {
     kout[green] << "success to insert" << endl;
     tar->pre = nullptr;
@@ -119,16 +126,17 @@ void VMS::insert(VMR *tar)
     Head = tar;
 }
 
-VMR * VMS::insert(uint64 start,uint64 end,uint32 flag)
+VMR* VMS::insert(uint64 start, uint64 end, uint32 flag)
 {
-    VMR *tar=(VMR*)pmm.malloc(sizeof(VMR));
-    tar->start=start;
-    tar->end=end;
-    tar->flag.flag=flag;
+    VMR* tar = (VMR*)pmm.malloc(sizeof(VMR));
+    tar->start = start;
+    tar->end = end;
+    tar->flag.flag = flag;
     insert(tar);
     return tar;
 }
-void VMS::leave()
+
+void VMS::Leave()
 {
     KernelVMS->Enter();
 }
@@ -136,16 +144,18 @@ void VMS::leave()
 void VMS::Enter()
 {
     if (CurVMS == this)
+    {
         return;
+    }
     CurVMS = this;
     lcr3((uint64)PDT->PAddr());
     asm volatile("sfence.vma \n fence.i \n fence");
     kout[yellow] << "Enter VMS" << endl;
 }
 
-bool VMS::del(bool (*p)(VMR *tar))
+bool VMS::del(bool (*p)(VMR* tar))
 {
-    VMR *t, *t1;
+    VMR* t, * t1;
     while (Head != nullptr && p(Head))
     {
         t = Head;
@@ -179,7 +189,7 @@ bool VMS::del(bool (*p)(VMR *tar))
     kout[green] << "success del VMR" << endl;
     return true;
 }
-bool VMS::del(VMR *tar)
+bool VMS::del(VMR* tar)
 {
     if (tar->pre == nullptr && tar->next == nullptr)
     {
@@ -193,9 +203,9 @@ bool VMS::del(VMR *tar)
     return false;
 }
 
-VMR *VMS::find(void *addr)
+VMR* VMS::find(void* addr)
 {
-    VMR *t = Head;
+    VMR* t = Head;
     while (t != nullptr)
     {
         if (t->GetStart() <= (uint64)addr && t->GetEnd() > (uint64)addr)
@@ -207,17 +217,17 @@ VMR *VMS::find(void *addr)
 
 bool VMS::Static_Init()
 {
-    KernelVMS = (VMS *)pmm.malloc(sizeof(VMS));
+    KernelVMS = (VMS*)pmm.malloc(sizeof(VMS));
     if (KernelVMS == nullptr)
     {
         kout[red] << "failed to malloc Kernel VMS" << endl;
         return false;
     }
 
-    KernelVMS->PDT = (PAGETABLE *)boot_sv39_page_table;
+    KernelVMS->PDT = (PAGETABLE*)boot_sv39_page_table;
     KernelVMS->VMRCount = 1;
 
-    KernelVMS->Head = (VMR *)pmm.malloc(sizeof(VMR));
+    KernelVMS->Head = (VMR*)pmm.malloc(sizeof(VMR));
     KernelVMS->Head->Init(0xffffffff00000000, 0xffffffffc0000000, 39);
 
     KernelVMS->ShareCount = 1;
@@ -235,7 +245,7 @@ bool VMS::clear()
     {
         if (Head != nullptr)
         {
-            VMR *t;
+            VMR* t;
             while (Head->next)
             {
                 t = Head->next;
@@ -266,7 +276,7 @@ bool VMS::destroy()
 
 void VMS::show()
 {
-    VMR *t = Head;
+    VMR* t = Head;
     while (t)
     {
         kout[blue] << "start :" << KOUT::hex(t->GetStart()) << endl;
@@ -277,23 +287,23 @@ void VMS::show()
     kout << endl;
 }
 
-bool VMS::SolvePageFault(TRAPFRAME *tf)
+bool VMS::SolvePageFault(TRAPFRAME* tf)
 {
-    VMR *t = find((void *)(tf->badvaddr));
+    VMR* t = find((void*)(tf->badvaddr));
     if (t == nullptr)
     {
         kout[red] << "Invalid addr" << endl;
         return false;
     }
 
-    ENTRY &e2 = PDT->getEntry(((tf->badvaddr >> 12) >> (9 * 2)) & 511);
-    PAGETABLE *p;
+    ENTRY& e2 = PDT->getEntry(((tf->badvaddr >> 12) >> (9 * 2)) & 511);
+    PAGETABLE* p;
     if (!e2.V)
     {
-        p = (PAGETABLE *)pmm.malloc(4096);
+        p = (PAGETABLE*)pmm.malloc(4096);
         p->Init();
         e2.set_PNN(p->PAddr());
-        kout[yellow]<<KOUT::hex(e2.get_PNN())<<endl;
+        kout[yellow] << KOUT::hex(e2.get_PNN()) << endl;
         e2.V = 1;
         e2.W = 0;
         e2.R = 0;
@@ -301,10 +311,10 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
     }
     p = e2.get_next_page();
 
-    ENTRY &e1 = p->getEntry(((tf->badvaddr >> 12) >> (9 * 1)) & 511);
+    ENTRY& e1 = p->getEntry(((tf->badvaddr >> 12) >> (9 * 1)) & 511);
     if (!e1.V)
     {
-        p = (PAGETABLE *)pmm.malloc(4096);
+        p = (PAGETABLE*)pmm.malloc(4096);
         p->Init();
         e1.set_PNN(p->PAddr());
         e1.V = 1;
@@ -314,10 +324,10 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
     }
     p = e1.get_next_page();
 
-    ENTRY &e0 = p->getEntry((tf->badvaddr >> 12) & 511);
+    ENTRY& e0 = p->getEntry((tf->badvaddr >> 12) & 511);
     if (!e0.V)
     {
-        p = (PAGETABLE *)pmm.malloc(4096);
+        p = (PAGETABLE*)pmm.malloc(4096);
         e0.set_PNN(p->PAddr());
         e0.V = 1;
         e0.W = t->flag.Write;
@@ -334,7 +344,7 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
     return true;
 }
 
-bool TrapFunc_PageFault(TRAPFRAME *tf)
+bool TrapFunc_PageFault(TRAPFRAME* tf)
 {
     return VMS::GetCurVMS()->SolvePageFault(tf);
 }

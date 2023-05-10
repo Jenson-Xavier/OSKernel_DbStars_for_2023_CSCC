@@ -5,6 +5,57 @@
 // 在实现进程过程中发现有必要 暂时简单实现几个常用的经典cstring函数 为自己的kstring
 
 #include <type.hpp>
+#include <sbi.h>
+
+// 做一个简单的封装
+inline void putchar(char ch)
+{
+    sbi_putchar(ch);
+}
+
+inline void puts(const char* str)
+{
+    while (*str)
+    {
+        sbi_putchar(*str);
+        str++;
+    }
+}
+
+inline int getchar()
+{
+    int ret_ch;
+    while (1)
+    {
+        ret_ch = sbi_getchar();
+        if (ret_ch != -1)
+        {
+            break;
+        }
+    }
+    return ret_ch;
+}
+
+inline int gets(char buf[], int buffersize)
+{
+    int i = 0;
+    while (i < buffersize)
+    {
+        char ch = getchar();
+        if (ch == '\n' || ch == '\r' || ch == '\0' || ch == -1)
+        {
+            putchar('\n');
+            buf[i++] = 0;
+            break;
+        }
+        else
+        {
+            putchar(ch);
+            buf[i++] = ch;
+        }
+    }
+    return i;
+}
 
 uint64 strlen(const char* s);
 
