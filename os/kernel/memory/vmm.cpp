@@ -119,6 +119,15 @@ void VMS::insert(VMR *tar)
     Head = tar;
 }
 
+VMR * VMS::insert(uint64 start,uint64 end,uint32 flag)
+{
+    VMR *tar=(VMR*)pmm.malloc(sizeof(VMR));
+    tar->start=start;
+    tar->end=end;
+    tar->flag.flag=flag;
+    insert(tar);
+    return tar;
+}
 void VMS::leave()
 {
     KernelVMS->Enter();
@@ -311,9 +320,9 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
         p = (PAGETABLE *)pmm.malloc(4096);
         e0.set_PNN(p->PAddr());
         e0.V = 1;
-        e0.W = 1;
-        e0.R = 1;
-        e0.X = 1;
+        e0.W = t->flag.Write;
+        e0.R = t->flag.Read;
+        e0.X = t->flag.Exec;
     }
     else
     {

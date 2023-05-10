@@ -166,6 +166,7 @@ private:
 
 public:
     void insert(VMR *tar);
+    VMR * insert(uint64  start,uint64 end,uint32 flag);
     bool del(bool (*p)(VMR *tar));
     bool del(VMR *tar);
     VMR *find(void *addr);
