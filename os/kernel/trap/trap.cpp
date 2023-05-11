@@ -89,7 +89,7 @@ extern "C"
                 switch (tf->reg.a7)
                 {
                 case 1:
-                    kout[blue] << "Current Proc's PID is " << pm.get_cur_proc()->pid << " and Exit!" << endl;
+                    kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " and Exit!" << endl;
                     // pm.print_all_list();
                     return pm.proc_scheduler(tf);
                 }
@@ -111,7 +111,7 @@ extern "C"
             case CAUSE_MACHINE_ECALL:
                 break;
             case CAUSE_STORE_PAGE_FAULT:
-                kout[yellow]<<"PAFE_FAULT"<<endl;
+                kout[yellow]<<"PAGE_FAULT"<<endl;
                 TrapFunc_PageFault(tf);
                 break;
             default:

@@ -40,7 +40,7 @@ bool PAGETABLE::Destroy()
         }
         pmm.free(entries);
     }
-    kout[green] << "success Destroy" << endl;
+    // kout[green] << "success Destroy" << endl;
     return true;
 }
 
@@ -102,7 +102,7 @@ bool VMR::Init(uint64 _start, uint64 _end, uint32 _flags)
     return true;
 }
 
-bool VMS::Init()
+bool VMS::init()
 {
     Head = nullptr;
     VMRCount = 0;
@@ -116,7 +116,7 @@ bool VMS::Init()
 
 void VMS::insert(VMR* tar)
 {
-    kout[green] << "success to insert" << endl;
+    // kout[green] << "success to insert" << endl;
     tar->pre = nullptr;
     tar->next = Head;
     if (Head != nullptr)
@@ -150,7 +150,7 @@ void VMS::Enter()
     CurVMS = this;
     lcr3((uint64)PDT->PAddr());
     asm volatile("sfence.vma \n fence.i \n fence");
-    kout[yellow] << "Enter VMS" << endl;
+    // kout[yellow] << "Enter VMS" << endl;
 }
 
 bool VMS::del(bool (*p)(VMR* tar))
@@ -168,7 +168,7 @@ bool VMS::del(bool (*p)(VMR* tar))
 
     if (Head == nullptr)
     {
-        kout[green] << "success del VMR" << endl;
+        // kout[green] << "success del VMR" << endl;
         return true;
     }
 
@@ -186,9 +186,10 @@ bool VMS::del(bool (*p)(VMR* tar))
         }
         t = t->next;
     }
-    kout[green] << "success del VMR" << endl;
+    // kout[green] << "success del VMR" << endl;
     return true;
 }
+
 bool VMS::del(VMR* tar)
 {
     if (tar->pre == nullptr && tar->next == nullptr)
@@ -215,6 +216,16 @@ VMR* VMS::find(void* addr)
     return nullptr;
 }
 
+void VMS::ref()
+{
+    ShareCount++;
+}
+
+void VMS::unref()
+{
+    ShareCount--;
+}
+
 bool VMS::Static_Init()
 {
     KernelVMS = (VMS*)pmm.malloc(sizeof(VMS));
@@ -231,6 +242,7 @@ bool VMS::Static_Init()
     KernelVMS->Head->Init(0xffffffff00000000, 0xffffffffc0000000, 39);
 
     KernelVMS->ShareCount = 1;
+    kout[blue] << "VirtualMemorySpace for Kernel init Success!" << endl;
     return true;
 }
 
@@ -259,7 +271,7 @@ bool VMS::clear()
     }
     ShareCount = 1;
 
-    kout[green] << "success clear VMS" << endl;
+    // kout[green] << "success clear VMS" << endl;
     return true;
 }
 
@@ -277,8 +289,10 @@ bool VMS::destroy()
 void VMS::show()
 {
     VMR* t = Head;
+    if (t == nullptr)kout << "YES" << endl;
     while (t)
     {
+        kout << Hex((uint64)t->next) << endl;
         kout[blue] << "start :" << KOUT::hex(t->GetStart()) << endl;
         kout[blue] << "end   :" << KOUT::hex(t->GetEnd()) << endl;
         kout[blue] << "flag  :" << KOUT::hex(t->GetFlags().flag) << endl;

@@ -1,5 +1,6 @@
 #ifndef __TYPE_HPP__
 #define __TYPE_HPP__
+
 typedef unsigned long long uint64;
 typedef unsigned int uint32;
 typedef unsigned short uint16;

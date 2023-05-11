@@ -77,7 +77,7 @@ int ProcessQueueManager::length_pq(proc_queue& pq)
     return ret_len;
 }
 
-void ProcessQueueManager::enqueue_pq(proc_queue& pq,proc_struct* ins_proc)
+void ProcessQueueManager::enqueue_pq(proc_queue& pq, proc_struct* ins_proc)
 {
     ListNode* newnode = (ListNode*)kmalloc(sizeof(struct ListNode));
     newnode->proc = ins_proc;

@@ -23,7 +23,11 @@ void ProcessManager::show(proc_struct* proc)
         << "proc pid_bro_pre : " << proc->pid_bro_pre << endl
         << "proc pid_bro_next : " << proc->pid_bro_next << endl
         << "proc pid_fir_child : " << proc->pid_fir_child << endl
-        << "-------------------------------------------" << endl;
+        << "proc vms addr : " << Hex((uint64)proc->vms) << endl
+        << "proc vms : " << endl;
+    proc->vms->show();
+    VMS::GetKernelVMS()->show();
+    kout << "-------------------------------------------" << endl;
 }
 
 void ProcessManager::print_all_list()
@@ -141,6 +145,7 @@ proc_struct* ProcessManager::alloc_proc()
     proc->kstack = nullptr;
     proc->kstacksize = 0;
     proc->context = nullptr;
+    proc->vms = nullptr;
     proc->pid_fa = -1;
     proc->pid_bro_pre = -1;
     proc->pid_bro_next = -1;
@@ -154,6 +159,7 @@ proc_struct* ProcessManager::alloc_proc()
 
 bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
 {
+
     if (proc == nullptr)
     {
         kout[red] << "The Process has not existed!" << endl;
@@ -176,6 +182,7 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
         5. 其他的部分需要在其他场景下根据需要改变
         6. 分配一个独特的进程号
         7. 设置时间相关信息
+        8. 初始化虚存管理相关信息
     */
 
     int tm_pid = get_unique_pid();
@@ -200,6 +207,7 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
         proc->runtime = 0;
         proc->sleeptime = 0;
         proc->readytime = 0;
+        proc->vms = nullptr;
         // ... 其他待定
     }
     else
@@ -215,6 +223,7 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
         proc->runtime = 0;
         proc->sleeptime = 0;
         proc->readytime = 0;
+        proc->vms = nullptr;
         // ... 其他待定
     }
     return true;
@@ -257,7 +266,9 @@ bool ProcessManager::free_proc(proc_struct* proc)
         return false;
     }
 
-    // 当然目前主要只有一个内核栈空间需要检查
+    // 当然目前主要有
+    // 内核栈空间需要检查
+    // 虚存管理分配空间需要检查
     int check_ret = 0;
     if (proc->kstack != nullptr || proc->kstacksize > 0)
     {
@@ -270,9 +281,18 @@ bool ProcessManager::free_proc(proc_struct* proc)
             return false;
         }
     }
+    if (proc->vms != nullptr)
+    {
+        // 当然如果前面某个if就调用了这个函数 那么应该所有需要被检查释放的资源都已经释放
+        check_ret = finish_proc(proc);
+        if (check_ret != 0)
+        {
+            return false;
+        }
+    }
     else
     {
-        // ... 后续还有文件系统 内存管理 IPC等等
+        // ... 后续还有文件系统 IPC等等
     }
 
     // 上述确保进程相关的所属资源已经完全释放
@@ -294,15 +314,36 @@ int ProcessManager::finish_proc(proc_struct* proc)
     // 而不是释放这个结构本身 这个任务在free_proc里面完成
     // 因该遵循这样的内存释放逻辑
 
-    // 目前主要只有一个内核栈需要检查
+    // 目前主要有
+    // 内核栈需要检查
+    // 虚存管理需要检查
     if (proc->kstacksize > 0 || proc->kstack != nullptr)
     {
         kfree(proc->kstack);
         proc->kstack = nullptr;
         proc->kstacksize = 0;
     }
-
-    // ... 虚存 文件 IPC等其他部分
+    if (proc->vms != nullptr)
+    {
+        if (proc->vms->GetShareCount() > 1)
+        {
+            // 这个vms还被其他进程引用(共享内存等)
+            // 暂时还不能调用释放资源的函数
+            // 这里就解除引用 退出地址空间
+            // 并将指针指向置空
+            proc->vms->unref();
+            proc->vms->Leave();
+            proc->vms = nullptr;
+        }
+        else
+        {
+            // 可以调用destroy函数清空并释放相关资源了
+            proc->vms->Leave();
+            proc->vms->destroy();
+            proc->vms = nullptr;
+        }
+    }
+    // ... 文件 IPC等其他部分
 
     return 0;
 }
@@ -351,8 +392,36 @@ bool ProcessManager::set_proc_kstk(proc_struct* proc, void* kaddr, uint32 size)
             return false;
         }
     }
+    
     proc->kstack = kaddr;
     proc->kstacksize = size;
+    return true;
+}
+
+bool ProcessManager::set_proc_vms(proc_struct* proc, VMS* vms)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return false;
+    }
+
+    if (proc->vms != nullptr)
+    {
+        // 已经存在了vms 不应该再设置了
+        kout[yellow] << "The Process's vms has allocated!" << endl;
+        return false;
+    }
+
+    if (vms == nullptr)
+    {
+        kout[yellow] << "The vms is Empty not can be set!" << endl;
+        return false;
+    }
+
+    proc->vms = vms;
+    proc->vms->ref();
+    proc->vms->init();
     return true;
 }
 
@@ -378,7 +447,8 @@ void ProcessManager::init_idleproc_for_boot()
     idle_proc->kstacksize = boot_stack_top - boot_stack;
     set_proc_name(idle_proc, (char*)"DBStars_Operating_System");
     add_proc_tolist(idle_proc);                     // 别忘了加入进程链表 永驻第1个节点位置
-    pm.switchstat_proc(idle_proc, Proc_running);                 // 初始化完了就让这个进程一直跑起来吧
+    set_proc_vms(idle_proc, VMS::GetKernelVMS());   // 0号boot进程的vms地址空间的设置
+    pm.switchstat_proc(idle_proc, Proc_running);    // 初始化完了就让这个进程一直跑起来吧
 }
 
 void ProcessManager::Init()
@@ -386,7 +456,9 @@ void ProcessManager::Init()
     // 初始化相关变量
     proc_listhead.pid = -1;                         // dummyhead 进程号永远为-1
     cur_proc = nullptr;
-
+    need_imme_run_proc = nullptr;
+    need_rest = false;
+    
     // PM类的初始化主要就是初始化出 idle 0号进程
     init_idleproc_for_boot();
     cur_proc = idle_proc;                           // 别忘了设置cur_proc
@@ -397,7 +469,7 @@ void ProcessManager::Init()
     kout << endl;
 }
 
-bool ProcessManager:: switchstat_proc(proc_struct* proc, uint32 tar_stat)
+bool ProcessManager::switchstat_proc(proc_struct* proc, uint32 tar_stat)
 {
     if (proc == nullptr)
     {
@@ -476,7 +548,7 @@ bool ProcessManager::start_kernel_proc(proc_struct* proc, int (*func)(void*), vo
     proc->context->reg.sp = (uint64)((char*)proc->kstack + proc->kstacksize);
     pm.switchstat_proc(proc, Proc_ready);
     return true;
-    
+
     // 这里通过注释补充一下这里的上下文实现逻辑 因为这一块的设计还是比较具有独创性的 相当绕
     // 每个进程的context成员其实更规范可以叫做 last_context
     // 仔细联系调度器scheduler的代码逻辑
@@ -504,19 +576,50 @@ extern "C"
     }
 }
 
+// 进程调度非常非常关键的调度器函数 本内核设计模式下所有的调度工作都将在这里实现
+// 具有极强的灵活性和可扩展性
+// 并且极好地实现了封装和隔离的高效的代码管理
 TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
 {
     // 进程调度器的核心功能 利用trap进行进程调度
     // 调度器每次轮询时遇到需要回收的进程都会进行相应的回收
-    
+
     if (cur_proc == nullptr)
     {
         kout[red] << "The Current Process is Nullptr!" << endl;
     }
-    
+
     cur_proc->context = context;                    // 相当于进行的上下文的保存工作
     proc_struct* sptr = nullptr;
-    sptr = cur_proc;
+    if (need_rest)
+    {
+        sptr = cur_proc->next;                      // 从当前进程执行rest函数触发调度 那么应该跳过本进程的检查
+        need_rest = false;
+    }
+    else
+    {
+        sptr = cur_proc;
+    }
+
+    // 检查是否有需要优先调度的进程 目前仅为单进程的优先调度算法
+    // 后期有条件考虑实现为支持优先级或队列的优先级调度逻辑
+    if (need_imme_run_proc != nullptr)
+    {
+        if (need_imme_run_proc->stat == Proc_ready)
+        {
+            if (cur_proc->stat == Proc_running)
+            {
+                pm.switchstat_proc(cur_proc, Proc_ready);
+            }
+            cur_proc = need_imme_run_proc;
+            pm.switchstat_proc(cur_proc, Proc_running);
+            cur_proc->vms->Enter();                 // 虚存管理地址空间的核心处理函数 要运行一个进程 就需要进入它的地址空间
+            // 此进程已经被优先调度了 单逻辑公平机制下应该将优先调度指针置空
+            need_imme_run_proc = nullptr;
+            return cur_proc->context;
+        }
+    }
+
     // 暂时就是遍历进程链表去寻找第一个可调度的进程 测试逻辑
     while (sptr != nullptr)
     {
@@ -528,6 +631,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
             }
             cur_proc = sptr;
             pm.switchstat_proc(cur_proc, Proc_running);
+            cur_proc->vms->Enter();
             return cur_proc->context;
         }
         else
@@ -544,7 +648,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
             }
         }
     }
-    
+
     // 没有return 将前一半继续遍历一次
     sptr = proc_listhead.next;
     while (sptr != cur_proc)
@@ -557,6 +661,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
             }
             cur_proc = sptr;
             pm.switchstat_proc(cur_proc, Proc_running);
+            cur_proc->vms->Enter();
             return cur_proc->context;
         }
         else
@@ -605,13 +710,78 @@ void ProcessManager::imme_trigger_schedule()
     }
 }
 
+void ProcessManager::run_proc(proc_struct* proc)
+{
+    // 让一个进程立即run起来 其实就是让它成为调度器的下一个进程
+    // 这个函数没有理由让一个进程独占时间片
+    // 这个函数存在的目的仅是为了暂时提高这个进程的优先级并让它成为下一个需要调度的进程
+    // 利用中断和本OS内核的进程调度逻辑可以发出一个立即调度的信号从而实现
+    // 其实是通过这个函数实现了进程调度模块中的伪优先级调度算法
+    // 不过设计逻辑上暂时只能支持一个进程的优先级调度
+    // 后期条件允许考虑设计进程队列或者优先队列支持下的优先级调度算法...
+    if (proc->stat == Proc_running)
+    {
+        // 如果进程已经在run 则没必要
+        return;
+    }
+    if (proc->stat == Proc_ready)
+    {
+        // 我们的逻辑是只有就绪态的进程才能允许被立刻run
+        // 而阻塞态的进程因为同步原语的设置只能被相关原语唤醒
+        // 不应该提供强制run唤醒的接口 这会破坏同步原语的结构
+        if (need_imme_run_proc == nullptr)
+        {
+            need_imme_run_proc = proc;
+            imme_trigger_schedule();
+            if (need_imme_run_proc == proc)
+            {
+                need_imme_run_proc = nullptr;
+            }
+        }
+        else
+        {
+            kout[yellow] << "There has a Process need to run!" << endl;
+        }
+    }
+}
+
+void ProcessManager::rest_proc(proc_struct* proc)
+{
+    // 让一个进程暂时暂停使用时间片 即阻塞
+    // 不过这个只是让该进程立即停止执行手头的工作
+    // 转而调度其他进程 下一次轮到它是取决于调度器RR轮询的逻辑
+    // 和信号量中使用的wait队列的出队逻辑是不一致的
+    if (proc->stat == Proc_running)
+    {
+        // 区别就在这里 仅是改变进程状态为就绪态 暂时停止执行 放出资源和时间片
+        // 并非同步原语中的等待队列的逻辑 那个是进入了阻塞/睡眠态
+        // 这个还是可以在任意时刻被唤醒的
+        pm.switchstat_proc(proc, Proc_ready);
+        need_rest = true;
+        imme_trigger_schedule();
+        if (need_rest)
+        {
+            need_rest = false;
+        }
+    }
+}
+
+void ProcessManager::kill_proc(proc_struct* proc)
+{
+    // 强行杀死一个进程
+    // 同样的逻辑 更改状态并调度 调度器中会自行回收
+    pm.switchstat_proc(proc, Proc_zombie);
+    kout[red] << "The Process whose pid is " << proc->pid << " has been Killed!" << endl;
+    imme_trigger_schedule();
+}
+
 proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name)
 {
     proc_struct* k_proc = pm.alloc_proc();
     pm.init_proc(k_proc, 1);
     pm.set_proc_name(k_proc, name);
     pm.set_proc_kstk(k_proc, nullptr, KERNELSTACKSIZE * 4);
-    // VMS...
+    pm.set_proc_vms(k_proc, VMS::GetKernelVMS());
     pm.start_kernel_proc(k_proc, func, arg);
     return k_proc;
 }

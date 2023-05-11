@@ -3,8 +3,8 @@
 
 #include <type.hpp>
 #include <pmm.hpp>
-#include <kstring.hpp>
-#include <kout.hpp>
+#include <klib.hpp>
+#include <process.hpp>
 #include <trap.hpp>
 #include <Riscv.h>
 
@@ -26,6 +26,8 @@ inline void* P2KAddr(void* Paddr)
     return (void*)(((uint64)(Paddr)) - PhysiclaVirtualMemoryOffset);
 }
 
+class VMS;
+
 class PAGETABLE;
 
 union ENTRY;
@@ -38,7 +40,7 @@ extern "C"
 union ENTRY
 {
     uint64 page_table_entry;
-    
+
     // 用于直接对对应寄存器操作
     struct
     {
@@ -75,9 +77,9 @@ union ENTRY
     {
         return X + R + W;
     }
-    
+
     // 返回内核地址
-    inline PAGETABLE* get_next_page() 
+    inline PAGETABLE* get_next_page()
     {
         if (is_leaf())
             return nullptr;
@@ -149,12 +151,12 @@ public:
     {
         return start - end;
     }
-    
+
     inline uint64 GetStart()
     {
         return start;
     }
-    
+
     inline uint64 GetEnd()
     {
         return end;
@@ -187,7 +189,10 @@ public:
     bool del(VMR* tar);
     VMR* find(void* addr);
 
-    bool Init();
+    void ref();                             // 和进程相关的引用解引用
+    void unref();
+    
+    bool init();
     bool clear();                           // 清除VMR List,清除前确保只有一个进程在使用该空间
     bool destroy();                         // 删除VMS
 
@@ -197,7 +202,7 @@ public:
     {
         return KernelVMS;
     }
-    
+
     inline static VMS* GetCurVMS()
     {
         return CurVMS;
@@ -206,6 +211,11 @@ public:
     inline PAGETABLE* GetPageTable()
     {
         return PDT;
+    }
+
+    inline uint64 GetShareCount()
+    {
+        return ShareCount;
     }
 
     void Enter();                           // 将当前空间切换到该实例所表示的空间

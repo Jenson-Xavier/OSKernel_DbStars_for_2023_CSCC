@@ -71,8 +71,8 @@ void test_kstring()
 
 void test_process1()
 {
-    pm.Init();
-    proc_struct* current = pm.get_cur_proc();
+    // pm.Init();
+    // proc_struct* current = pm.get_cur_proc();
 
     // 输出调试信息
     // kout << Hex((uint64)idle_proc) << endl
@@ -87,26 +87,33 @@ void test_process1()
     //     << "ProcessManager Init Successfully!" << endl;
 
     proc_struct* test_proc = pm.alloc_proc();
+
     // pm.show(test_proc);
     pm.init_proc(test_proc, 1);
+    pm.set_proc_name(test_proc, (char*)"User_Test_Process");
+    pm.set_proc_kstk(test_proc, nullptr, KERNELSTACKSIZE * 4);
+    pm.set_proc_vms(test_proc, VMS::GetKernelVMS());
+    pm.show(test_proc);
+    VMS::GetKernelVMS()->show();
     // pm.show(test_proc);
-    int testid = test_proc->pid;
-    proc_struct* tm = pm.get_proc(testid);
+    // int testid = test_proc->pid;
+    // proc_struct* tm = pm.get_proc(testid);
     // pm.show(tm);
     // pm.print_all_list();
-    proc_struct* test2 = pm.alloc_proc();
-    pm.init_proc(test2, 2);
-    pm.set_proc_name(test2, (char*)"User_Test_Process");
-    pm.set_proc_kstk(test2, nullptr, KERNELSTACKSIZE);
+    // proc_struct* test2 = pm.alloc_proc();
+    // pm.init_proc(test2, 1);
+    // pm.set_proc_name(test2, (char*)"User_Test_Process");
+    // pm.set_proc_kstk(test2, nullptr, KERNELSTACKSIZE);
+    // pm.set_proc_vms(test2, VMS::GetKernelVMS());
     // pm.print_all_list();
-    kout[red] << pm.get_proc_count() << endl;
-    pm.free_proc(test2);
+    // kout[red] << pm.get_proc_count() << endl;
+    // pm.free_proc(test2);
+    // // pm.print_all_list();
+    // kout[red] << pm.get_proc_count() << endl;
+    // // pm.free_proc(idle_proc);
+    // pm.free_proc(test_proc);
+    // kout[red] << pm.get_proc_count() << endl;
     // pm.print_all_list();
-    kout[red] << pm.get_proc_count() << endl;
-    // pm.free_proc(idle_proc);
-    pm.free_proc(test_proc);
-    kout[red] << pm.get_proc_count() << endl;
-    pm.print_all_list();
 }
 
 void test_process2()
@@ -114,17 +121,23 @@ void test_process2()
     auto func = [](void* data)->int
     {
         const char* str = (const char*)data;
+        if (str[0] == '#')
+        {
+            pm.get_cur_proc()->vms->insert(0x123, 0x456, 7);
+        }
         while (*str)
         {
             int n = 1e8;
             while (n-- > 0);
             kout << *str++;
+            // if ((*str) == '#')pm.rest_proc(pm.get_cur_proc());
         }
+        pm.show(pm.get_cur_proc());
         return 0;
     };
-    CreateKernelProcess(func, (void*)"###OP###HIJKLMN###", (char*)"test1");
-    CreateKernelProcess(func, (void*)"%%%QR%%%%ABCDEFG%%", (char*)"test2");
-    CreateKernelProcess(func, (void*)"(((UVWXYZ((())ST))", (char*)"test3");
+    CreateKernelProcess(func, (void*)"########", (char*)"test1");
+    CreateKernelProcess(func, (void*)"%%%%%%%%", (char*)"test2");
+    CreateKernelProcess(func, (void*)"********", (char*)"test3");
 }
 
 void test_lock()
@@ -238,7 +251,7 @@ void test_VMS()
     VMS::Static_Init();
     VMS::GetKernelVMS()->show();
     VMS a;
-    a.Init();
+    a.init();
     VMR A, B;
     A.Init(0x123, 0x456, 7);
     B.Init(0x456, 0x789, 7);
@@ -253,7 +266,7 @@ void test_VMS()
 void test_page_fault()
 {
     VMS A;
-    A.Init();
+    A.init();
     VMR a;
     a.Init(PAGESIZE, 512 * PAGESIZE, 7);
     A.insert(&a);
@@ -288,8 +301,12 @@ int main()
     kout << endl;
 
     pmm.Init();
+    VMS::Static_Init();
     pm.Init();
+    VMS::GetKernelVMS()->show();
     
+    test_process2();
+
     while (1)
     {
         delay(100);

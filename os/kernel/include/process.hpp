@@ -10,6 +10,8 @@
 
 #define KERNELSTACKSIZE      4096
 
+class VMS;                  // 前置声明 可以作为类型引用
+
 // 定义控制进程的进程单元结构体 即实现进程控制块PCB 
 // 当然还有需要进程切换的进程上下文Context
 
@@ -83,9 +85,9 @@ struct proc_struct
     // reg_context context;     // 轻量级上下文 弃用...
     TRAPFRAME* context;         // 利用trapframe结构进行进程上下文的处理 更加清晰和统一 其直接分配在内核栈上
 
-    // ... 虚拟内存管理部分 以及地址空间 扩展用户进程
+    VMS* vms;                   // 虚拟内存关键VMS指针 管理虚存和物存空间
     
-    char name[PROC_NAME_LEN];   // 进程名称 后续有需求再完善字符串处理函数
+    char name[PROC_NAME_LEN];   // 进程名称
     
     // ... IPC进程通信部分
     
@@ -95,20 +97,22 @@ struct proc_struct
 // 声明全局 OS第0个进程idle_proc
 extern struct proc_struct* idle_proc;
 
-// 声明一个立即调度的bool变量 用来触发立即调度实现同步原语 即阻塞或者立即执行的功能
+// 声明一个立即调度的bool变量 用来触发立即调度实现同步原语或进程调度 即阻塞或者立即执行的功能
 extern bool imme_schedule;
 
 // 进程管理和控制的类 也可认为是进程调度器
 class ProcessManager
 {
 protected:
-    proc_struct proc_listhead;                              // 进程链表头节点
-    proc_struct* cur_proc;                                  // 当前正在执行的进程
-    uint32 proc_count;                                      // 存在的进程数量
-    void add_proc_tolist(proc_struct* proc);                // 将分配好的进程加入进程链表
-    bool remove_proc_fromlist(proc_struct* proc);           // 将已经加入进程链表的进程移除
+    proc_struct proc_listhead;                      // 进程链表头节点
+    proc_struct* cur_proc;                          // 当前正在执行的进程
+    proc_struct* need_imme_run_proc;                // 需要立即调度的进程 为了设计run_proc函数
+    uint32 proc_count;                              // 存在的进程数量
+    void add_proc_tolist(proc_struct* proc);        // 将分配好的进程加入进程链表
+    bool remove_proc_fromlist(proc_struct* proc);   // 将已经加入进程链表的进程移除
     void init_idleproc_for_boot();                  // 创建并初始化第0个idle进程 相当于boot进程
     int finish_proc(proc_struct* proc);             // 结束一个进程 释放其所属的资源 这里最好有对应的退出码设置
+    bool need_rest;                                 // 标记是否需要休息当前的进程 调度使用
 
 public:
     // PM类自身相关的操作
@@ -132,24 +136,29 @@ public:
         return proc_count;
     }
 
+    inline bool is_needrest()                       // 获取是否需要rest的信息
+    {
+        return need_rest;
+    }
+
+    // 进程调度核心 基于这样的进程调度设计非常具有可扩展性和灵活性
     TRAPFRAME* proc_scheduler(TRAPFRAME* context);   // 进行进程调度的关键函数 主要是时间片轮转 trap实现 故这里的返回值如此设置
     void imme_trigger_schedule();                    // 实现一个立即触发调度器 辅助且统一实现本OS设计下的进程调度模块
-        
-    // PM类管理proc_struct相关的操作
 
+    // PM类管理proc_struct相关的操作
     bool switchstat_proc(proc_struct* proc, uint32 tar_stat);               // 改变一个进程的状态
     bool set_proc_name(proc_struct* proc, char* name);                      // 设置一个进程的名称
     bool set_proc_kstk(proc_struct* proc, void* kaddr, uint32 size);        // 设置进程内核栈
     bool copy_otherprocs(proc_struct* dst, proc_struct* src);               // 进程间的拷贝
-    bool run_proc(proc_struct* proc);                                       // 执行一个进程
+    void run_proc(proc_struct* proc);                                       // 暂优先运行一个进程
+    void rest_proc(proc_struct* proc);                                      // 暂停一个进程
+    void kill_proc(proc_struct* proc);                                      // 杀死一个进程
+    bool set_proc_vms(proc_struct* proc, VMS* vms);                         // 设置进程的VMS属性
+    
     bool start_kernel_proc(proc_struct* proc,
         int (*func)(void*), void* arg);             // 通过给定的函数启动内核线程
-    
-    // ... 进程调度和切换需相关函数
 
     // ... 文件系统相关
-
-    // ... 虚拟内存管理 堆栈区域管理相关 涉及用户进程
 };
 
 // 创建内核进程的通用全局函数
