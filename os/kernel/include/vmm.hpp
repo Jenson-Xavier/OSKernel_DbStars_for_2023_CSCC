@@ -11,6 +11,8 @@
 #define PhysiclaVirtualMemoryOffset 0xffffffff00000000
 #define ENTRYCOUNT 512
 
+#define QEMU                                            // 现在在QEMU上进行 宏定义 让内核允许访问用户空间       
+
 // 区分三种地址：
 //  1、物理地址:只有ENTRY和satp中使用
 //  2、内核地址:物理内存管理器返回的都是内核地址
@@ -191,7 +193,7 @@ public:
 
     void ref();                             // 和进程相关的引用解引用
     void unref();
-    
+
     bool init();
     bool clear();                           // 清除VMR List,清除前确保只有一个进程在使用该空间
     bool destroy();                         // 删除VMS
@@ -218,6 +220,24 @@ public:
         return ShareCount;
     }
 
+    inline static void EnableAccessUser()
+    {
+#ifdef QEMU
+        write_csr(sstatus, read_csr(sstatus) | SSTATUS_SUM);
+#else
+        write_csr(sstatus, read_csr(sstatus) & ~SSTATUS_SUM);
+#endif
+    }
+
+    inline static void DisableAccessUser()
+    {
+#ifdef QEMU
+        write_csr(sstatus, read_csr(sstatus) & ~SSTATUS_SUM);
+#else
+        write_csr(sstatus, read_csr(sstatus) | SSTATUS_SUM);
+#endif
+    }
+
     void Enter();                           // 将当前空间切换到该实例所表示的空间
     void Leave();                           // 切换到内核空间
 
@@ -226,6 +246,6 @@ public:
     bool SolvePageFault(TRAPFRAME* tf);
 };
 
-bool TrapFunc_PageFault(TRAPFRAME* tf);
+bool trap_PageFault(TRAPFRAME* tf);
 
 #endif

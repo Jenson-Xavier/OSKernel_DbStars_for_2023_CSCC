@@ -1,73 +1,112 @@
-Build/kernel.elf :	Build/main.elf Build/start.elf Build/kout.elf Build/kstring.elf Build/trap.elf Build/trapEntry.elf Build/clock.elf Build/interrupt.elf Build/pmm.elf Build/vmm.elf Build/process.elf Build/Process.elf Build/spinlock.elf Build/mutex.elf Build/semaphore.elf
-	riscv64-unknown-elf-ld -o Build/kernel.elf -T Linker/linker.ld \
-	Build/main.elf \
-	Build/start.elf \
-	Build/kout.elf \
-	Build/kstring.elf \
-	Build/trap.elf \
-	Build/trapEntry.elf \
-	Build/clock.elf \
-	Build/interrupt.elf \
-	Build/pmm.elf \
-	Build/vmm.elf \
-	Build/process.elf \
-	Build/Process.elf \
-	Build/spinlock.elf \
-	Build/mutex.elf \
-	Build/semaphore.elf
+all: Build/test.img Build/Kernel/kernel.elf 
+
+#Kernel部分:
+
+Build/Kernel/kernel.elf :Build/Kernel/main.elf Build/Kernel/start.elf Build/Kernel/kout.elf \
+Build/Kernel/kstring.elf Build/Kernel/trap.elf Build/Kernel/trapEntry.elf Build/Kernel/clock.elf \
+Build/Kernel/interrupt.elf Build/Kernel/pmm.elf Build/Kernel/vmm.elf Build/Kernel/process.elf \
+Build/Kernel/syscall.elf Build/Kernel/Process_S.elf Build/Kernel/spinlock.elf Build/Kernel/mutex.elf \
+Build/Kernel/semaphore.elf
+	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld \
+	Build/Kernel/main.elf \
+	Build/Kernel/start.elf \
+	Build/Kernel/kout.elf \
+	Build/Kernel/kstring.elf \
+	Build/Kernel/trap.elf \
+	Build/Kernel/trapEntry.elf \
+	Build/Kernel/clock.elf \
+	Build/Kernel/interrupt.elf \
+	Build/Kernel/syscall.elf \
+	Build/Kernel/pmm.elf \
+	Build/Kernel/vmm.elf \
+	Build/Kernel/process.elf \
+	Build/Kernel/Process_S.elf \
+	Build/Kernel/spinlock.elf \
+	Build/Kernel/mutex.elf \
+	Build/Kernel/semaphore.elf --format=binary Build/*.img --format=default
+
+
+# Build/Kernel/kernel.elf :Build/Kernel/*.elf
+# 	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld Build/Kernel/*.elf
 
 #kernel
-Build/start.elf:kernel/boot/start.S
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/boot/start.S -o Build/start.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/start.elf:kernel/boot/start.S
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/boot/start.S -o Build/Kernel/start.elf -I"kernel/include" -mcmodel=medany
 
-Build/main.elf:kernel/boot/main.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/boot/main.cpp -o Build/main.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/main.elf:kernel/boot/main.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/boot/main.cpp -o Build/Kernel/main.elf -I"kernel/include" -mcmodel=medany
 
-Build/kout.elf:kernel/lib/kout.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/lib/kout.cpp -o Build/kout.elf -I"kernel/include" -mcmodel=medany
+#lib
+Build/Kernel/kout.elf:kernel/lib/kout.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/lib/kout.cpp -o Build/Kernel/kout.elf -I"kernel/include" -mcmodel=medany
 
-Build/kstring.elf:kernel/lib/kstring.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/lib/kstring.cpp -o Build/kstring.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/kstring.elf:kernel/lib/kstring.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/lib/kstring.cpp -o Build/Kernel/kstring.elf -I"kernel/include" -mcmodel=medany
 
 #trap
-Build/trap.elf:kernel/trap/trap.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/trap.cpp -o Build/trap.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/trap.elf:kernel/trap/trap.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/trap.cpp -o Build/Kernel/trap.elf -I"kernel/include" -mcmodel=medany
 
-Build/trapEntry.elf:kernel/trap/trapEntry.S
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/trapEntry.S -o Build/trapEntry.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/trapEntry.elf:kernel/trap/trapEntry.S
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/trapEntry.S -o Build/Kernel/trapEntry.elf -I"kernel/include" -mcmodel=medany
 
-Build/clock.elf:kernel/trap/clock.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/clock.cpp -o Build/clock.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/clock.elf:kernel/trap/clock.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/clock.cpp -o Build/Kernel/clock.elf -I"kernel/include" -mcmodel=medany
 
-Build/interrupt.elf:kernel/trap/interrupt.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/interrupt.cpp -o Build/interrupt.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/interrupt.elf:kernel/trap/interrupt.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/interrupt.cpp -o Build/Kernel/interrupt.elf -I"kernel/include" -mcmodel=medany
+
+Build/Kernel/syscall.elf:kernel/trap/syscall.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/trap/syscall.cpp -o Build/Kernel/syscall.elf -I"kernel/include" -mcmodel=medany
 
 #memory
-Build/pmm.elf:kernel/memory/pmm.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/pmm.cpp -o Build/pmm.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/pmm.elf:kernel/memory/pmm.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/pmm.cpp -o Build/Kernel/pmm.elf -I"kernel/include" -mcmodel=medany
 
-Build/vmm.elf:kernel/memory/vmm.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/vmm.cpp -o Build/vmm.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/vmm.elf:kernel/memory/vmm.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/vmm.cpp -o Build/Kernel/vmm.elf -I"kernel/include" -mcmodel=medany
 
 #process
-Build/process.elf:kernel/process/process.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/process.cpp -o Build/process.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/process.elf:kernel/process/process.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/process.cpp -o Build/Kernel/process.elf -I"kernel/include" -mcmodel=medany
 
-Build/Process.elf:kernel/process/Process.S
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Process.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/Process_S.elf:kernel/process/Process.S
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Kernel/Process_S.elf -I"kernel/include" -mcmodel=medany
 
 #synchronize
-Build/spinlock.elf:kernel/synchronize/spinlock.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/spinlock.cpp -o Build/spinlock.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/spinlock.elf:kernel/synchronize/spinlock.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/spinlock.cpp -o Build/Kernel/spinlock.elf -I"kernel/include" -mcmodel=medany
 
-Build/mutex.elf:kernel/synchronize/mutex.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/mutex.cpp -o Build/mutex.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/mutex.elf:kernel/synchronize/mutex.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/mutex.cpp -o Build/Kernel/mutex.elf -I"kernel/include" -mcmodel=medany
 
-Build/semaphore.elf:kernel/synchronize/semaphore.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/semaphore.cpp -o Build/semaphore.elf -I"kernel/include" -mcmodel=medany
+Build/Kernel/semaphore.elf:kernel/synchronize/semaphore.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/semaphore.cpp -o Build/Kernel/semaphore.elf -I"kernel/include" -mcmodel=medany
+
+#User部分:(主要是为了嵌入内核用户映像进行还没有文件系统下的用户进程的测试)
+
+#library
+Build/User/usermain.o:user/library/usermain.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c user/library/usermain.cpp -o Build/User/usermain.o -I"kernel/include" -I"user/library" -mcmodel=medany
+
+Build/User/userstart.o:user/library/userstart.S
+	riscv64-unknown-elf-g++ -nostdlib -c user/library/userstart.S -o Build/User/userstart.o	-I"kernel/include" -mcmodel=medany
+
+#user test.cpp
+Build/User/test.o:user/test.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c user/test.cpp -o Build/User/test.o -I"kernel/include" -I"user/library" -mcmodel=medany
+
+Build/User/test.elf:Build/User/test.o Build/User/usermain.o Build/User/userstart.o
+	riscv64-unknown-elf-ld -o Build/User/test.elf -T Linker/user.ld Build/User/test.o Build/User/usermain.o Build/User/userstart.o
+
+Build/test.img:Build/User/test.elf
+	riscv64-unknown-elf-objcopy Build/User/test.elf --strip-all -O binary Build/test.img
 
 clean:
-	rm Build/*
+	rm Build/* Build/Kernel/* Build/User/*
+
+clean1:
+	rm Build/Kernel/kernel.elf
 
 qemu:
-	qemu-system-riscv64 -machine virt -m 128M -nographic -bios SBI/opensbi-qemu.elf -kernel Build/kernel.elf
+	qemu-system-riscv64 -machine virt -m 128M -nographic -bios SBI/opensbi-qemu.elf -kernel Build/Kernel/kernel.elf

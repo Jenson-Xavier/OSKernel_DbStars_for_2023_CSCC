@@ -26,7 +26,6 @@ void ProcessManager::show(proc_struct* proc)
         << "proc vms addr : " << Hex((uint64)proc->vms) << endl
         << "proc vms : " << endl;
     proc->vms->show();
-    VMS::GetKernelVMS()->show();
     kout << "-------------------------------------------" << endl;
 }
 
@@ -146,10 +145,11 @@ proc_struct* ProcessManager::alloc_proc()
     proc->kstacksize = 0;
     proc->context = nullptr;
     proc->vms = nullptr;
-    proc->pid_fa = -1;
-    proc->pid_bro_pre = -1;
-    proc->pid_bro_next = -1;
-    proc->pid_fir_child = -1;
+    proc->pid_fa = nullptr;
+    proc->pid_bro_pre = nullptr;
+    proc->pid_bro_next = nullptr;
+    proc->pid_fir_child = nullptr;
+    proc->exit_value = 0;           // 只有在异常退出时才需要设置 大部分情况下均为0
     memset(&(proc->context), 0, sizeof proc->context);
     memset(proc->name, 0, PROC_NAME_LEN);
 
@@ -419,9 +419,10 @@ bool ProcessManager::set_proc_vms(proc_struct* proc, VMS* vms)
         return false;
     }
 
+    // 这个函数的逻辑是直接在外面根据条件分配好一个VMS直接拷贝过去
+    // 因此里头的逻辑就是拷贝+增加引用计数
     proc->vms = vms;
     proc->vms->ref();
-    proc->vms->init();
     return true;
 }
 
@@ -442,7 +443,7 @@ void ProcessManager::init_idleproc_for_boot()
     idle_proc->ku_flag = 1;                         // 内核级进程
     idle_proc->stat = Proc_ready;                   // 初始化状态为就绪态
     idle_proc->pid = 0;                             // 默认分配0号pid 特质idle进程
-    idle_proc->pid_fa = -1;                         // 根进程 永远不会存在父进程
+    idle_proc->pid_fa = nullptr;                    // 根进程 永远不会存在父进程
     idle_proc->kstack = boot_stack;                 // 第0个进程 内核栈地址直接放在boot_stack位置
     idle_proc->kstacksize = boot_stack_top - boot_stack;
     set_proc_name(idle_proc, (char*)"DBStars_Operating_System");
@@ -559,10 +560,78 @@ bool ProcessManager::start_kernel_proc(proc_struct* proc, int (*func)(void*), vo
     // 在trap入口处理完调度器的逻辑后返回值在trap入口的汇编代码会看到被重新放到sp处
     // 之后的restore其实恢复的寄存器是返回值的TRAPFRAME结构
     // 因而执行完sret后跳转到epc对应的pc处恢复之前的执行流就自然跳转到当前要调度的进程上去了
-    // 这里的返回值并不是trap之间通过STORE指令保存在栈上的那些值了
+    // 这里的返回值并不是trap之前通过STORE指令保存在栈上的那些值了
     // 当然如果只是单纯时钟中断 返回的TRAPFRAME和传入的参数一致 也就是正常上下文保存和恢复流程
     // 但是这里并没有任何影响 
     // 因为需要恢复的原先保存的那一段上下文TRAMFRAME结构已经在代码中放到所属进程结构体的对应成员中去了
+}
+
+bool ProcessManager::start_user_proc(proc_struct* proc, int (*func)(void*), void* arg)
+{
+    // 这个函数的存在更多是为了接口统一
+    // 实际上用户进程的真正含义并不会在内核使用在内核创建用户函数这一接口创建用户进程
+    // 汇编代码也作了处理 这种接口和start内核线程无异 为区分在特权级上做了处理
+    // 这个函数的参数是不正确的 是不符合用户进程的
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return false;
+    }
+
+    if (proc->kstack == nullptr && proc->kstacksize == 0)
+    {
+        kout[red] << "The Kernel Process doesn't have KernelStack!" << endl;
+        return false;
+    }
+
+    proc->context = (TRAPFRAME*)((char*)proc->kstack + proc->kstacksize) - 1;
+    // 注意用户进程的权限设置
+    uint64 SPIE = 1 << 5;                               // 100000
+    uint64 SIE = 1 << 1;                                // 10
+    uint64 SPP = 1 << 8;                                // 100000000
+    proc->context->status = (read_csr(sstatus) | SPIE) & (~SPP) & (~SIE);   // 特权级设置为U态
+    proc->context->epc = (uint64)UserProcessEntry;
+    proc->context->reg.s0 = (uint64)func;
+    proc->context->reg.s1 = (uint64)arg;
+    proc->context->reg.s2 = (uint64)proc;               // 内核给用户创建函数 也只能由内核来回收 这是不符合用户进程接口的
+    proc->context->reg.sp = (uint64)((char*)proc->kstack + proc->kstacksize);
+    pm.switchstat_proc(proc, Proc_ready);
+    return true;
+}
+
+bool ProcessManager::start_user_proc(proc_struct* proc, uint64 user_start_addr)
+{
+    // 此函数的接口才是符合用户进程定义的方式
+    // 这里是用用户映像嵌入内核的方式实现进行测试的
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return false;
+    }
+
+    if (proc->kstack == nullptr && proc->kstacksize == 0)
+    {
+        kout[red] << "The Kernel Process doesn't have KernelStack!" << endl;
+        return false;
+    }
+
+    // 这个是为了进程调度上下文切换实现的
+    // 进程的调度和上下文切换经过中断进行 进入S态后是内核完成的 
+    // 因此完成切换用的上下文需要放在内核栈处 
+    // 与内核进程不同 内核进程只在内核空间下进行 所以可以直接原地操作 sp指针就赋为内核栈地址即可
+    // 用户进程有内核栈和用户栈 在进入中断时需要进行换指针的操作(可见trap入口的汇编)
+    // 因此下面的sp指针需要设置为用户栈空间地址处 这是与内核进程启动不同的地方
+    proc->context = (TRAPFRAME*)((char*)proc->kstack + proc->kstacksize) - 1;
+    // 注意用户进程的权限设置
+    uint64 SPIE = 1 << 5;                               // 100000
+    uint64 SIE = 1 << 1;                                // 10
+    uint64 SPP = 1 << 8;                                // 100000000
+    proc->context->status = (read_csr(sstatus) | SPIE) & (~SPP) & (~SIE);
+    proc->context->epc = user_start_addr;
+    uint64 user_sp = EmbedUserProcessStackAddr + EmbedUserProcessStackSize;
+    proc->context->reg.sp = user_sp;
+    pm.switchstat_proc(proc, Proc_ready);
+    return true;
 }
 
 // 内核进程的退出
@@ -775,6 +844,29 @@ void ProcessManager::kill_proc(proc_struct* proc)
     imme_trigger_schedule();
 }
 
+void ProcessManager::exit_proc(proc_struct* proc, int ec)
+{
+    // 进程退出函数
+    // 主要是系统调用设计需要 ec为退出码
+    if (ec != 0)
+    {
+        // 退出码非正常
+        kout[yellow] << "The Process " << proc->pid << " exit with exit value " << ec << endl;
+        pm.switchstat_proc(proc, Proc_zombie);
+    }
+    else
+    {
+        // 退出码正常
+        kout[yellow] << "The process " << proc->pid << " exit successfully!" << endl;
+        pm.switchstat_proc(proc, Proc_finished);
+    }
+    proc->exit_value = ec;
+    proc->vms->Leave();
+    // 这里可以触发立即调度进行回收 也可以在时钟中断RR调度下轮询回收
+    // 立即回收理论上只有当调用函数的进程为当前执行的进程时会有明显效果
+    pm.imme_trigger_schedule();
+}
+
 proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name)
 {
     proc_struct* k_proc = pm.alloc_proc();
@@ -784,6 +876,41 @@ proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name)
     pm.set_proc_vms(k_proc, VMS::GetKernelVMS());
     pm.start_kernel_proc(k_proc, func, arg);
     return k_proc;
+}
+
+proc_struct* CreateUserImgProcess(uint64 img_start, uint64 img_end, char* name)
+{
+    // 创建用户进程
+    // 需要利用到虚存的相关进制
+    VMS* vms = (VMS*)kmalloc(sizeof(VMS));
+    vms->init();
+    uint64 img_load_size = img_end - img_start;
+    uint64 img_load_start = EmbedUserProcessEntryAddr;
+    uint64 img_load_end = img_load_start + img_load_size;
+    int user_bin_flag = 0b111;                                              // 用户映像的权限 可读可写可执行
+    vms->insert(img_load_start, img_load_end, user_bin_flag);               // 创建用户映像空间在虚存中
+    uint64 img_user_stack_size = EmbedUserProcessStackSize;
+    uint64 img_user_stack_start = EmbedUserProcessStackAddr;
+    uint64 img_user_stack_end = img_user_stack_start + img_user_stack_size;
+    int user_stack_flag = 0b1000001011;                                     // 用户栈权限 可读可写栈动态
+    vms->insert(img_user_stack_start, img_user_stack_end, user_stack_flag); // 分配用户栈空间
+
+    // 创建完用户的vms后就是创建进程的流程了
+    proc_struct* u_proc = pm.alloc_proc();
+    pm.init_proc(u_proc, 2);
+    pm.set_proc_name(u_proc, name);
+    pm.set_proc_kstk(u_proc, nullptr, KERNELSTACKSIZE * 4);
+    pm.set_proc_vms(u_proc, vms);
+    pm.start_user_proc(u_proc, EmbedUserProcessEntryAddr);
+
+    // test 能真正运行出想要的效果
+    u_proc->vms->Enter();                                                   // 进入vms
+    u_proc->vms->EnableAccessUser();                                        // 设置允许内核态访问用户空间 riscv的具有的一个点
+    memcpy((void*)img_load_start, (char*)img_start, img_load_size);         // 将嵌入内核的用户映像地址拷贝到用户空间执行地址处
+    u_proc->vms->DisableAccessUser();                                       // 上面执行完了 这里就反过来
+    u_proc->vms->Leave();                                                   // 离开vms
+
+    return u_proc;
 }
 
 ProcessManager pm;

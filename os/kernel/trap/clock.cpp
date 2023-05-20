@@ -28,7 +28,6 @@ void delay(uint64 t)
     {
         int i = 1000;
         while (i-- > 0);
-
     }
 }
 

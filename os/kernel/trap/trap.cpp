@@ -4,6 +4,69 @@
 #include <kout.hpp>
 #include <process.hpp>
 #include <memory.hpp>
+#include <syscall.hpp>
+
+// 中断名字数组 便于打印调试
+static const char* trap_intr_code_name[16] =
+{
+    "InterruptCode_0"							,
+    "InterruptCode_SupervisorSoftwareInterrupt" ,
+    "InterruptCode_2"							,
+    "InterruptCode_MachineSoftwareInterrupt"	,
+    "InterruptCode_4"							,
+    "InterruptCode_SupervisorTimerInterrupt"	,
+    "InterruptCode_6"							,
+    "InterruptCode_MachineTimerInterrupt"		,
+    "InterruptCode_8"							,
+    "InterruptCode_SupervisorExternalInterrupt"	,
+    "InterruptCode_10"							,
+    "InterruptCode_MachineExternalInterrupt"	,
+    "InterruptCode_12"							,
+    "InterruptCode_13"							,
+    "InterruptCode_14"							,
+    "InterruptCode_15"
+};
+
+// 异常名字数组 便于打印调试
+static const char* trap_excp_code_name[16] =
+{
+    "ExceptionCode_InstructionAddressMisaligned" ,
+    "ExceptionCode_InstructionAccessFault"       ,
+    "ExceptionCode_IllegalInstruction"           ,
+    "ExceptionCode_BreakPoint"                   ,
+    "ExceptionCode_LoadAddressMisaligned"        ,
+    "ExceptionCode_LoadAccessFault"              ,
+    "ExceptionCode_StoreAddressMisaligned"       ,
+    "ExceptionCode_StoreAccessFault"             ,
+    "ExceptionCode_UserEcall"	                 ,
+    "ExceptionCode_SupervisorEcall"              ,
+    "ExceptionCode_HypervisorEcall"              ,
+    "ExceptionCode_MachineEcall"                 ,
+    "ExceptionCode_InstructionPageFault"         ,
+    "ExceptionCode_LoadPageFault"                ,
+    "ExceptionCode_14"                           ,
+    "ExceptionCode_StorePageFault"
+};
+
+void trap_fail_info(TRAPFRAME* tf)
+{
+    // 需要对还没有实现的中断异常设置这个函数
+    // 能极大地方便我们的调试工作
+    kout[red] << "Trap Failed !" << endl;
+    kout[green] << "Type:" << (void*)tf->cause << endl;
+    kout[green] << "Name:";
+    if ((int64)tf->cause < 0)
+    {
+        kout[green] << trap_intr_code_name[tf->cause << 1 >> 1] << endl;
+    }
+    else
+    {
+        kout[green] << trap_excp_code_name[tf->cause] << endl;
+    }
+    kout[green] << "tval:" << (void*)tf->badvaddr << endl;
+    kout[green] << "status:" << (void*)tf->status << endl;
+    kout[green] << "epc:" << (void*)tf->epc << endl;
+}
 
 extern "C"
 {
@@ -45,6 +108,7 @@ extern "C"
                 {
                     // kout[green] << imme_schedule << endl;
                     // kout[yellow] << "cur_proc's pid is : " << pm.get_cur_proc()->pid << endl;
+                    // kout[yellow] << "cur_proc's name is " << pm.get_cur_proc()->name << endl;
                     // kout[yellow] << "cur proc cnt is : " << pm.get_proc_count() << endl;
                     // 每100个时钟周期进行一次进程RR调度
                     // 或者imme_schedule为真时立即调度切换进程实现同步原语下的进程调度
@@ -78,10 +142,9 @@ extern "C"
             switch (tf->cause)
             {
             case CAUSE_MISALIGNED_FETCH:
-                break;
             case CAUSE_FETCH_ACCESS:
-                break;
             case CAUSE_ILLEGAL_INSTRUCTION:
+                trap_fail_info(tf);
                 break;
             case CAUSE_BREAKPOINT:
                 // 执行ebreak调用触发断点异常 从而实现进程退出的回收
@@ -95,30 +158,32 @@ extern "C"
                 }
                 break;
             case CAUSE_MISALIGNED_LOAD:
-                break;
             case CAUSE_LOAD_ACCESS:
-                break;
             case CAUSE_MISALIGNED_STORE:
-                break;
             case CAUSE_STORE_ACCESS:
+                trap_fail_info(tf);
                 break;
             case CAUSE_USER_ECALL:
+                // 系统调用部分 用户触发USER_ECALL异常
+                trap_Syscall(tf);
+                tf->epc += 4;           // 将sepc指向ecall的下一条指令地址处
                 break;
             case CAUSE_SUPERVISOR_ECALL:
-                break;
             case CAUSE_HYPERVISOR_ECALL:
-                break;
             case CAUSE_MACHINE_ECALL:
+                trap_fail_info(tf);
                 break;
+            case 12:
+            case 13:
             case CAUSE_STORE_PAGE_FAULT:
-                kout[yellow]<<"PAGE_FAULT"<<endl;
-                TrapFunc_PageFault(tf);
+                // 缺页中断异常
+                // kout[yellow] << "PAGE_FAULT" << endl;
+                trap_PageFault(tf);
                 break;
             default:
-                break;
+                trap_fail_info(tf);
             }
         }
-
         return tf;
     }
 }

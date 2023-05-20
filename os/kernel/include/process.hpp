@@ -7,8 +7,15 @@
 #include <memory.hpp>
 #include <trap.hpp>
 #include <clock.hpp>
+#include <resources.hpp>
 
+// 内核栈设置
 #define KERNELSTACKSIZE      4096
+
+// 用户栈设置
+#define EmbedUserProcessEntryAddr   0x800020
+#define EmbedUserProcessStackSize   4096 * 32
+#define EmbedUserProcessStackAddr   0x80000000 - EmbedUserProcessStackSize
 
 class VMS;                  // 前置声明 可以作为类型引用
 
@@ -53,6 +60,7 @@ extern "C"
     extern char boot_stack[];
     extern char boot_stack_top[];
     extern char KernelProcessEntry[];
+    extern char UserProcessEntry[];
 };
 
 #define PROC_NAME_LEN   50      // 进程名字的最大长度 待完成完善字符串处理函数后继续实现
@@ -77,10 +85,10 @@ struct proc_struct
     uint32 kstacksize;          // 内核栈大小 rv64下默认采取16KB实现
     
     // 链接部分
-    int pid_fa;                 // 到父进程的pid 这里直接用pid作为映射与指针相区分 用一点效率换取简便的设计
-    int pid_bro_pre;            // 到兄弟进程 pre方向
-    int pid_bro_next;           // 到兄弟进程 next方向
-    int pid_fir_child;          // 到第一个孩子进程
+    proc_struct* pid_fa;        // 到父进程的进程结构体 这里使用指针 方便确保进程树的关系不乱
+    proc_struct* pid_bro_pre;   // 到兄弟进程 pre方向
+    proc_struct* pid_bro_next;  // 到兄弟进程 next方向
+    proc_struct* pid_fir_child; // 到第一个孩子进程
     
     // reg_context context;     // 轻量级上下文 弃用...
     TRAPFRAME* context;         // 利用trapframe结构进行进程上下文的处理 更加清晰和统一 其直接分配在内核栈上
@@ -88,6 +96,8 @@ struct proc_struct
     VMS* vms;                   // 虚拟内存关键VMS指针 管理虚存和物存空间
     
     char name[PROC_NAME_LEN];   // 进程名称
+
+    int exit_value;             // 后续系统调用需要 退出状态值(具体使用场景暂无)
     
     // ... IPC进程通信部分
     
@@ -153,16 +163,23 @@ public:
     void run_proc(proc_struct* proc);                                       // 暂优先运行一个进程
     void rest_proc(proc_struct* proc);                                      // 暂停一个进程
     void kill_proc(proc_struct* proc);                                      // 杀死一个进程
+    void exit_proc(proc_struct* proc, int ec);                              // 进程退出函数
     bool set_proc_vms(proc_struct* proc, VMS* vms);                         // 设置进程的VMS属性
     
-    bool start_kernel_proc(proc_struct* proc,
-        int (*func)(void*), void* arg);             // 通过给定的函数启动内核线程
-
-    // ... 文件系统相关
+    bool start_kernel_proc(proc_struct* proc,       // 通过给定的函数启动内核线程
+        int (*func)(void*), void* arg);             
+    bool start_user_proc(proc_struct* proc,         // 通过给定的函数启动用户进程(内核创建用户函数 几乎不会使用)
+        int (*func)(void*), void* arg);
+    bool start_user_proc(proc_struct* proc,         // 通过用户映像启动用户进程
+        uint64 user_start_addr);
+        // ... 文件系统相关
 };
 
 // 创建内核进程的通用全局函数
 proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name);
+
+// 创建用户进程的全局函数(内核嵌入用户进程映像实现的)
+proc_struct* CreateUserImgProcess(uint64 img_start, uint64 img_end, char* name = (char*)"");
 
 extern ProcessManager pm;
 

@@ -104,7 +104,7 @@ bool VMR::Init(uint64 _start, uint64 _end, uint32 _flags)
 
 bool VMS::init()
 {
-    Head = nullptr;
+    // Head = nullptr;
     VMRCount = 0;
 
     PDT = (PAGETABLE*)pmm.malloc(4096);
@@ -128,6 +128,7 @@ void VMS::insert(VMR* tar)
 
 VMR* VMS::insert(uint64 start, uint64 end, uint32 flag)
 {
+    // ... 需要进行对齐
     VMR* tar = (VMR*)pmm.malloc(sizeof(VMR));
     tar->start = start;
     tar->end = end;
@@ -289,10 +290,8 @@ bool VMS::destroy()
 void VMS::show()
 {
     VMR* t = Head;
-    if (t == nullptr)kout << "YES" << endl;
     while (t)
     {
-        kout << Hex((uint64)t->next) << endl;
         kout[blue] << "start :" << KOUT::hex(t->GetStart()) << endl;
         kout[blue] << "end   :" << KOUT::hex(t->GetEnd()) << endl;
         kout[blue] << "flag  :" << KOUT::hex(t->GetFlags().flag) << endl;
@@ -317,7 +316,7 @@ bool VMS::SolvePageFault(TRAPFRAME* tf)
         p = (PAGETABLE*)pmm.malloc(4096);
         p->Init();
         e2.set_PNN(p->PAddr());
-        kout[yellow] << KOUT::hex(e2.get_PNN()) << endl;
+        // kout[yellow] << KOUT::hex(e2.get_PNN()) << endl;
         e2.V = 1;
         e2.W = 0;
         e2.R = 0;
@@ -347,10 +346,11 @@ bool VMS::SolvePageFault(TRAPFRAME* tf)
         e0.W = t->flag.Write;
         e0.R = t->flag.Read;
         e0.X = t->flag.Exec;
+        e0.U = 1;           // 用户页面需要增加用户标志位
     }
     else
     {
-        kout[red] << "page exeis but still error" << endl;
+        kout[red] << "page exists but still error" << endl;
         return false;
     }
 
@@ -358,7 +358,7 @@ bool VMS::SolvePageFault(TRAPFRAME* tf)
     return true;
 }
 
-bool TrapFunc_PageFault(TRAPFRAME* tf)
+bool trap_PageFault(TRAPFRAME* tf)
 {
     return VMS::GetCurVMS()->SolvePageFault(tf);
 }

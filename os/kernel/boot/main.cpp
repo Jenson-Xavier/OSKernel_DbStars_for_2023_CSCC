@@ -7,6 +7,7 @@
 #include <memory.hpp>
 #include <process.hpp>
 #include <synchronize.hpp>
+#include <resources.hpp>
 
 void test_outHex()
 {
@@ -121,10 +122,10 @@ void test_process2()
     auto func = [](void* data)->int
     {
         const char* str = (const char*)data;
-        if (str[0] == '#')
-        {
-            pm.get_cur_proc()->vms->insert(0x123, 0x456, 7);
-        }
+        // if (str[0] == '#')
+        // {
+        //     pm.get_cur_proc()->vms->insert(0x123, 0x456, 7);
+        // }
         while (*str)
         {
             int n = 1e8;
@@ -132,12 +133,12 @@ void test_process2()
             kout << *str++;
             // if ((*str) == '#')pm.rest_proc(pm.get_cur_proc());
         }
-        pm.show(pm.get_cur_proc());
+        // pm.show(pm.get_cur_proc());
         return 0;
     };
     CreateKernelProcess(func, (void*)"########", (char*)"test1");
     CreateKernelProcess(func, (void*)"%%%%%%%%", (char*)"test2");
-    CreateKernelProcess(func, (void*)"********", (char*)"test3");
+    // CreateKernelProcess(func, (void*)"********", (char*)"test3");
 }
 
 void test_lock()
@@ -286,6 +287,14 @@ void test_page_fault()
     kout[green] << str << endl;
 }
 
+void test_user_img_process()
+{
+    uint64 ts = (uint64)get_resource_begin(test_img);
+    uint64 te = (uint64)get_resource_end(test_img);
+    kout << Hex(ts) << ' ' << Hex(te) << endl;
+    CreateUserImgProcess(ts, te, (char*)"u_test");
+}
+
 int main()
 {
     kout << endl;
@@ -303,10 +312,9 @@ int main()
     pmm.Init();
     VMS::Static_Init();
     pm.Init();
-    VMS::GetKernelVMS()->show();
-    
-    test_process2();
 
+    test_user_img_process();
+    
     while (1)
     {
         delay(100);
