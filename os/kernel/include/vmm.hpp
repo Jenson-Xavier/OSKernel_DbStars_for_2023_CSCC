@@ -248,4 +248,14 @@ public:
 
 bool trap_PageFault(TRAPFRAME* tf);
 
+using size_t =long unsigned int;
+
+void * operator new(size_t size);
+void * operator new[](size_t size);
+void  operator delete(void * p,uint64 size);
+void  operator delete[](void * p);
+
+
+
+
 #endif

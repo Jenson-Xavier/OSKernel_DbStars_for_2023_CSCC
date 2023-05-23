@@ -6,7 +6,7 @@ Build/Kernel/kernel.elf :Build/Kernel/main.elf Build/Kernel/start.elf Build/Kern
 Build/Kernel/kstring.elf Build/Kernel/trap.elf Build/Kernel/trapEntry.elf Build/Kernel/clock.elf \
 Build/Kernel/interrupt.elf Build/Kernel/pmm.elf Build/Kernel/vmm.elf Build/Kernel/process.elf \
 Build/Kernel/syscall.elf Build/Kernel/Process_S.elf Build/Kernel/spinlock.elf Build/Kernel/mutex.elf \
-Build/Kernel/semaphore.elf
+Build/Kernel/semaphore.elf Build/Kernel/pathtool.elf Build/Kernel/vfs.elf 
 	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld \
 	Build/Kernel/main.elf \
 	Build/Kernel/start.elf \
@@ -19,10 +19,12 @@ Build/Kernel/semaphore.elf
 	Build/Kernel/syscall.elf \
 	Build/Kernel/pmm.elf \
 	Build/Kernel/vmm.elf \
+	Build/Kernel/vfs.elf \
 	Build/Kernel/process.elf \
 	Build/Kernel/Process_S.elf \
 	Build/Kernel/spinlock.elf \
 	Build/Kernel/mutex.elf \
+	Build/Kernel/pathtool.elf \
 	Build/Kernel/semaphore.elf --format=binary Build/*.img --format=default
 
 
@@ -65,6 +67,14 @@ Build/Kernel/pmm.elf:kernel/memory/pmm.cpp
 
 Build/Kernel/vmm.elf:kernel/memory/vmm.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/vmm.cpp -o Build/Kernel/vmm.elf -I"kernel/include" -mcmodel=medany
+
+#file
+Build/Kernel/vfs.elf:kernel/file/vfs.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/vfs.cpp -o Build/Kernel/vfs.elf -I"kernel/include" -mcmodel=medany
+
+Build/Kernel/pathtool.elf:kernel/file/pathtool.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/pathtool.cpp -o Build/Kernel/pathtool.elf -I"kernel/include" -mcmodel=medany
+
 
 #process
 Build/Kernel/process.elf:kernel/process/process.cpp

@@ -362,3 +362,22 @@ bool trap_PageFault(TRAPFRAME* tf)
 {
     return VMS::GetCurVMS()->SolvePageFault(tf);
 }
+
+void * operator new(size_t size)
+{
+    return pmm.malloc(size);
+}
+
+void * operator new[](size_t size)
+{
+    return pmm.malloc(size);
+}
+void  operator delete(void * p,size_t size)
+{
+    pmm.free(p);
+}
+void  operator delete[](void * p)
+{
+    pmm.free(p);
+}
+

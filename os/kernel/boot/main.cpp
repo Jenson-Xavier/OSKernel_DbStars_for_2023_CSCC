@@ -8,6 +8,7 @@
 #include <process.hpp>
 #include <synchronize.hpp>
 #include <resources.hpp>
+#include <vfs.hpp>
 
 void test_outHex()
 {
@@ -25,14 +26,14 @@ void test_outHex()
 void test_memory()
 {
     // test memory
-    uint32 arr[] = { 1456467546, 2465464845, 345646546, 465454688, 546841385 };
+    uint32 arr[] = {1456467546, 2465464845, 345646546, 465454688, 546841385};
     kout << Memory(arr, arr + 5, 4);
 }
 
 void test_page_alloc()
 {
     // test page alloc
-    PAGE* a, * b, * c, * d, * e;
+    PAGE *a, *b, *c, *d, *e;
     kout[yellow] << 1 << endl;
     a = pmm.alloc_pages(2);
 
@@ -52,7 +53,7 @@ void test_page_alloc()
 void test_kmalloc()
 {
     // test kmalloc and kfree
-    void* testaddr = kmalloc(64);
+    void *testaddr = kmalloc(64);
     // kout << Memory(testaddr, (void*)(testaddr + 64)) << endl;
     kout << Hex((uint64)testaddr) << endl;
     kfree(testaddr);
@@ -87,11 +88,11 @@ void test_process1()
     //     << "idle_proc's kernel_user flag : " << idle_proc->ku_flag << endl
     //     << "ProcessManager Init Successfully!" << endl;
 
-    proc_struct* test_proc = pm.alloc_proc();
+    proc_struct *test_proc = pm.alloc_proc();
 
     // pm.show(test_proc);
     pm.init_proc(test_proc, 1);
-    pm.set_proc_name(test_proc, (char*)"User_Test_Process");
+    pm.set_proc_name(test_proc, (char *)"User_Test_Process");
     pm.set_proc_kstk(test_proc, nullptr, KERNELSTACKSIZE * 4);
     pm.set_proc_vms(test_proc, VMS::GetKernelVMS());
     pm.show(test_proc);
@@ -119,9 +120,9 @@ void test_process1()
 
 void test_process2()
 {
-    auto func = [](void* data)->int
+    auto func = [](void *data) -> int
     {
-        const char* str = (const char*)data;
+        const char *str = (const char *)data;
         // if (str[0] == '#')
         // {
         //     pm.get_cur_proc()->vms->insert(0x123, 0x456, 7);
@@ -129,25 +130,26 @@ void test_process2()
         while (*str)
         {
             int n = 1e8;
-            while (n-- > 0);
+            while (n-- > 0)
+                ;
             kout << *str++;
             // if ((*str) == '#')pm.rest_proc(pm.get_cur_proc());
         }
         // pm.show(pm.get_cur_proc());
         return 0;
     };
-    CreateKernelProcess(func, (void*)"########", (char*)"test1");
-    CreateKernelProcess(func, (void*)"%%%%%%%%", (char*)"test2");
+    CreateKernelProcess(func, (void *)"########", (char *)"test1");
+    CreateKernelProcess(func, (void *)"%%%%%%%%", (char *)"test2");
     // CreateKernelProcess(func, (void*)"********", (char*)"test3");
 }
 
 void test_lock()
 {
-    auto func = [](void* data)->int
+    auto func = [](void *data) -> int
     {
-        int k = 0;                   // 测试时需要移到全局位置
+        int k = 0; // 测试时需要移到全局位置
         int last = 0;
-        const char* str = (const char*)data;
+        const char *str = (const char *)data;
         if (!mutex.try_mutex())
         {
             mutex.release_mutex();
@@ -158,11 +160,12 @@ void test_lock()
         //     spin_lock.unlock();
         //     spin_lock.lock();
         // }
-        for (int j = 0;j < 10;j++)
+        for (int j = 0; j < 10; j++)
         {
             k++;
             int n = 1e8;
-            while (n-- > 0);
+            while (n-- > 0)
+                ;
             // kout << str << ':' << k << " lock: " << spin_lock.get_slv() << endl;
             kout << str << ':' << k << " belong pid: " << mutex.get_blid() << endl;
         }
@@ -170,9 +173,9 @@ void test_lock()
         // spin_lock.unlock();
         return 0;
     };
-    CreateKernelProcess(func, (void*)"test1", (char*)"test1");
-    CreateKernelProcess(func, (void*)"test2", (char*)"test2");
-    CreateKernelProcess(func, (void*)"test3", (char*)"test3");
+    CreateKernelProcess(func, (void *)"test1", (char *)"test1");
+    CreateKernelProcess(func, (void *)"test2", (char *)"test2");
+    CreateKernelProcess(func, (void *)"test3", (char *)"test3");
 }
 
 void test_processqueue()
@@ -180,9 +183,9 @@ void test_processqueue()
     proc_queue q;
     pqm.init(q);
 
-    proc_struct* test1 = pm.alloc_proc();
+    proc_struct *test1 = pm.alloc_proc();
     pm.init_proc(test1, 1);
-    proc_struct* test2 = pm.alloc_proc();
+    proc_struct *test2 = pm.alloc_proc();
     pm.init_proc(test2, 2);
 
     kout << pqm.length_pq(q) << endl;
@@ -202,44 +205,46 @@ void test_processqueue()
 
 void test_semaphore()
 {
-    auto func = [](void* data)->int
+    auto func = [](void *data) -> int
     {
         int get = semaphore.wait();
-        if (get < 0)pm.imme_trigger_schedule();
-        const char* str = (const char*)data;
+        if (get < 0)
+            pm.imme_trigger_schedule();
+        const char *str = (const char *)data;
         while (*str)
         {
             int n = 1e8;
-            while (n-- > 0);
+            while (n-- > 0)
+                ;
             kout << *str++;
         }
         semaphore.signal();
         return 0;
     };
     semaphore.init(2);
-    CreateKernelProcess(func, (void*)"AAAAAAAAAAAAAAAAAAAAAA", (char*)"test1");
-    CreateKernelProcess(func, (void*)"BBBBBBBBBBBBBBBBBBBBBB", (char*)"test2");
-    CreateKernelProcess(func, (void*)"CCCCCCCCCCCCCCCCCCCCCC", (char*)"test3");
+    CreateKernelProcess(func, (void *)"AAAAAAAAAAAAAAAAAAAAAA", (char *)"test1");
+    CreateKernelProcess(func, (void *)"BBBBBBBBBBBBBBBBBBBBBB", (char *)"test2");
+    CreateKernelProcess(func, (void *)"CCCCCCCCCCCCCCCCCCCCCC", (char *)"test3");
 }
 
 void test_pageTable()
 {
-    PAGETABLE* A, * B;
-    A = (PAGETABLE*)pmm.malloc(sizeof(PAGETABLE));
+    PAGETABLE *A, *B;
+    A = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
     kout[yellow] << 1 << endl;
     A->Init(1);
     A->show();
     A->Destroy();
 
     kout[yellow] << 2 << endl;
-    A = (PAGETABLE*)pmm.malloc(sizeof(PAGETABLE));
+    A = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
     A->Init(0);
     A->show();
     A->Destroy();
 
     kout[yellow] << 3 << endl;
-    A = (PAGETABLE*)pmm.malloc(sizeof(PAGETABLE));
-    B = (PAGETABLE*)pmm.malloc(sizeof(PAGETABLE));
+    A = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
+    B = (PAGETABLE *)pmm.malloc(sizeof(PAGETABLE));
     A->Init(0);
     B->Init();
     A->getEntry(3) = ENTRY::arr_to_ENTRY(P2KAddr(&B[0]));
@@ -277,7 +282,7 @@ void test_page_fault()
     A.Enter();
     VMS::GetCurVMS()->show();
 
-    char* str = (char*)PAGESIZE;
+    char *str = (char *)PAGESIZE;
     strcpy(str, "hello");
     // *str='1';
     kout[yellow] << 1 << endl;
@@ -292,7 +297,7 @@ void test_user_img_process()
     uint64 ts = (uint64)get_resource_begin(test_img);
     uint64 te = (uint64)get_resource_end(test_img);
     kout << Hex(ts) << ' ' << Hex(te) << endl;
-    CreateUserImgProcess(ts, te, (char*)"u_test");
+    CreateUserImgProcess(ts, te, (char *)"u_test");
 }
 
 int main()
@@ -313,8 +318,11 @@ int main()
     VMS::Static_Init();
     pm.Init();
 
-    test_user_img_process();
-    
+
+    // test_memory();
+    // test_user_img_process();
+    vfsm.Init();
+
     while (1)
     {
         delay(100);

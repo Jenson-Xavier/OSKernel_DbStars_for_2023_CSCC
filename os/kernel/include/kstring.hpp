@@ -57,6 +57,19 @@ inline int gets(char buf[], int buffersize)
     return i;
 }
 
+inline bool isInStr(char tar,const char * src)
+{
+    while (*src)
+    {
+        if (tar==*src)
+            return true ;
+        
+        src++;
+    }
+    return false;
+    
+}
+
 uint64 strlen(const char* s);
 
 char* strcpy(char* dst, const char* src);
