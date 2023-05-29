@@ -8,7 +8,12 @@
 #include <process.hpp>
 #include <synchronize.hpp>
 #include <resources.hpp>
-#include <vfs.hpp>
+
+#include <FAT32.hpp>
+// #include <vfs.hpp>
+
+#include <ramdisk_driver.hpp>
+extern "C" void __cxa_pure_virtual() { kout[red] << "incomp pure virtual func"; }
 
 void test_outHex()
 {
@@ -300,6 +305,32 @@ void test_user_img_process()
     CreateUserImgProcess(ts, te, (char *)"u_test");
 }
 
+void test_fat32device_driver()
+{
+    FAT32Device fat32dev;
+    fat32dev.init();
+    unsigned char *t = new unsigned char[512];
+    fat32dev.read(0, t);
+    for (int i = 0; i < 512; i++)
+    {
+        if (i % 16 == 0)
+            kout << endl;
+        kout[blue] << (char)t[i - 1] << ' ';
+    }
+    kout << endl;
+    kout[red] << "-------------" << endl;
+    memset(t, 0, 512);
+    fat32dev.write(0, t);
+    fat32dev.read(0, t);
+    for (int i = 0; i < 512; i++)
+    {
+        if (i % 16 == 0)
+            kout << endl;
+        kout[blue] << (char)t[i - 1] << ' ';
+    }
+    delete[] t;
+}
+
 int main()
 {
     kout << endl;
@@ -318,10 +349,54 @@ int main()
     VMS::Static_Init();
     pm.Init();
 
+    kout[blue] << (uint64)sizeof(FATtable) << endl;
+    FATtable p;
+    // kout[blue]<<(uint64)p.name<<endl;
+    // kout[blue]<<(uint64)p.ex_name<<endl;
+    // kout[blue]<<(uint64)&p.type<<endl;
+    // kout[blue]<<(uint64)&p.rs<<endl;
+    // kout[blue]<<(uint64)&p.ns<<endl;
+    // kout[blue]<<(uint64)p.S_time<<endl;
+    // kout[blue]<<(uint64)p.S_date<<endl;
+    // kout[blue]<<(uint64)p.C_time<<endl;
+    // kout[blue]<<(uint64)&p.high_clus<<endl;
+    // kout[blue]<<(uint64)p.M_time<<endl;
+    // kout[blue]<<(uint64)p.M_date<<endl;
+    // kout[blue]<<(uint64)&p.size<<endl;
 
+    // kout[blue]<<(uint64)&p.attribute<<endl;
+    // kout[blue]<<(uint64)p.lname0<<endl;
+    // kout[blue]<<(uint64)&p.type1<<endl;
+    // kout[blue]<<(uint64)&p.rs2<<endl;
+    // kout[blue]<<(uint64)&p.check<<endl;
+    // kout[blue]<<(uint64)p.lname1<<endl;
+    // kout[blue]<<(uint64)&p.clus1<<endl;
+    // kout[blue]<<(uint64)p.lname2<<endl;
+    FAT32 fat;
+    FAT32FILE *t;
+    char *buf;
+    t = fat.open("/wdnmd/abc.txt");
+    t->show();
+
+    // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
+    // t->show();
+
+    buf = new char[t->table.size];
+    fat.read(t,(unsigned char *)buf,t->table.size);
+    kout<<buf;
+    // fat.write(t,(unsigned char *)"hello",6);
+    // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
+    // t->show();
+    // fat.read(t,(unsigned char *)buf,10);
+    // kout<<buf;
+
+
+    delete[] buf;
+
+    // test_fat32device_driver();
     // test_memory();
     // test_user_img_process();
-    vfsm.Init();
+    // vfsm.Init();
 
     while (1)
     {

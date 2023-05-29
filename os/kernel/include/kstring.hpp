@@ -7,6 +7,14 @@
 #include <type.hpp>
 #include <sbi.h>
 
+
+inline bool isdigit(char c)
+{
+    if (c<='9'&&c>='0')
+        return true;
+    return false;
+}
+
 // 做一个简单的封装
 inline void putchar(char ch)
 {
@@ -73,6 +81,7 @@ inline bool isInStr(char tar,const char * src)
 uint64 strlen(const char* s);
 
 char* strcpy(char* dst, const char* src);
+char* strcpy_no_end(char* dst, const char* src);
 
 int strcmp(const char* s1, const char* s2);
 

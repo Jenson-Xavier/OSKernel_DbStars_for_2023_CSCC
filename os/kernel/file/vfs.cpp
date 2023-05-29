@@ -1,12 +1,16 @@
 #include <vfs.hpp>
 
-VFSM vfsm;
-
+// VFSM vfsm;
 
 // FileNode
 int64 FileNode::read(void *dst, uint64 pos, uint64 size)
 {
     return -1;
+}
+
+bool FileNode::del()
+{
+    return true;
 }
 
 int64 FileNode::write(void *src, uint64 pos, uint64 size)
@@ -144,142 +148,169 @@ FileNode::~FileNode()
 
 // VFSM
 
-bool VFSM::add_new_node(FileNode *p, FileNode *parent)
-{
-    if (parent == nullptr)
-    {
-        return false;
-    }
+// bool VFSM::add_new_node(FileNode *p, FileNode *parent)
+// {
+//     if (parent == nullptr)
+//     {
+//         return false;
+//     }
 
-    p->set_parent(parent);
-    return true;
-}
+//     p->set_parent(parent);
+//     return true;
+// }
 
-bool VFSM::is_absolutepath(char *path)
-{
-    if (path[0] != '/')
-    {
-        return false;
-    }
+// bool VFSM::is_absolutepath(char *path)
+// {
+//     if (path[0] != '/')
+//     {
+//         return false;
+//     }
 
-    while (*path)
-    {
-        if (!isInStr(*path, INVALIDPATHCHAR()))
-            return false;
+//     while (*path)
+//     {
+//         if (!isInStr(*path, INVALIDPATHCHAR()))
+//             return false;
 
-        path++;
-    }
-    return true;
-}
+//         path++;
+//     }
+//     return true;
+// }
 
-bool VFSM::create_directory(char *path)
-{
-    FileNode * t;
-    t=find_vfs(path,path);
-    return t->vfs->create_dir(path);
-}
+// // FileNode * VFSM::get_node(char * path)
+// // {
+// //     FileNode * t;
+// //     t=find_vfs(path,path);
+// //     return t->vfs->get_node(path);
+// // }
+// FileNode *VFSM::create_directory(char *path)
+// {
+//     FileNode *t;
+//     t = find_vfs(path, path);
+//     return t->vfs->create_dir(path);
+// }
 
-bool VFSM::create_file(char *path)
-{
-    FileNode * t;
-    t=find_vfs(path,path);
-    return t->vfs->create_file(path);
-}
-bool VFSM::move(char *src, char *dst)
-{
-    //...
-    return true;
-}
+// FileNode *VFSM::create_file(char *path)
+// {
+//     FileNode *t;
+//     t = find_vfs(path, path);
+//     return t->vfs->create_file(path);
+// }
+// bool VFSM::move(char *src, char *dst)
+// {
+//     //...
+//     return true;
+// }
 
-bool VFSM::copy(char *src, char *dst)
-{
-    //...
-    return true;
-}
+// bool VFSM::copy(char *src, char *dst)
+// {
+//     //...
+//     return true;
+// }
 
-bool VFSM::del(char *path)
-{
+// bool VFSM::del(char *path)
+// {
 
-    FileNode * t;
-    t=find_vfs(path,path);
-    return t->vfs->del(path);
-}
+//     FileNode *t;
+//     t = get_node(path);
+//     if (t==root)
+//     {
+//         return false;
+//     }
+    
+//     t->del();
 
-bool load_vfs(VFS *vfs, const char *path)
-{
-     
-}
+//     return true;
+// }
 
-FileNode *VFSM::find_child_name(FileNode *p, const char *name)
-{
-    FileNode *t = p->child;
-    while (t)
-    {
-        if (strcmp(t->get_name(), name) == 0)
-            return t;
-        t = t->next;
-    }
+// bool VFSM::load_vfs(VFS *vfs, char *path)
+// {
+//     FileNode *t;
+//     t = get_node(path);
+//     if (t != nullptr)
+//     {
+//         t->vfs = vfs;
+//         return true;
+//     }
+//     return false;
+// }
 
-    return nullptr;
-}
+// FileNode *VFSM::find_child_name(FileNode *p, const char *name)
+// {
+//     FileNode *t = p->child;
+//     while (t)
+//     {
+//         if (strcmp(t->get_name(), name) == 0)
+//             return t;
+//         t = t->next;
+//     }
 
-FileNode *VFSM::find_vfs(char * path)
-{
-    if (path[0] != '/')
-    {
-        kout[red] << "path error" << endl;
-        return nullptr;
-    }
-    char *t, *buf;
-    FileNode *now = root;
-    buf = new char[50];
-    while (path = split_path_name(path, buf)[0])
-    {
-        now=find_child_name(now, buf);
-        if (now->TYPE&FileNode::__VFS)
-        {
-            delete[] buf;
-            return now;
-        }
-    }
-    delete[] buf;
-    return nullptr;
-}
-FileNode *VFSM::find_vfs(char * path,char *&re)
-{
-    if (path[0] != '/')
-    {
-        kout[red] << "path error" << endl;
-        return nullptr;
-    }
-    char *t, *buf;
-    FileNode *now = root;
-    buf = new char[50];
-    while (path = split_path_name(path, buf)[0])
-    {
-        now=find_child_name(now, buf);
-        if (now->TYPE&FileNode::__VFS)
-        {
-            re=path; 
-            delete[] buf;
-            return now;
-        }
-    }
-    delete[] buf;
-    re=path;
-    return nullptr;
-}
+//     return nullptr;
+// }
 
-bool VFSM::Init()
-{
-    root = new FileNode(nullptr, FileNode::__DIR | FileNode::__ROOT);
-    FileNode *p = new FileNode(nullptr, FileNode::__DIR);
-    p->set_name((char *)"VFS");
-    add_new_node(root, p);
-    return true;
-}
+// FileNode *VFSM::get_node(char *path)
+// {
+//     if (path[0] != '/')
+//     {
+//         kout[red] << "path error" << endl;
+//         return nullptr;
+//     }
+//     char *t, *buf;
+//     FileNode *now = root;
+//     buf = new char[50];
+//     while (path = split_path_name(path, buf)[0])
+//     {
+//         now = find_child_name(now, buf);
+//     }
+//     delete[] buf;
+//     return now;
+// }
+// FileNode *VFSM::find_vfs(char * path,char *&re)
+// {
+//     if (path[0] != '/')
+//     {
+//         kout[red] << "path error" << endl;
+//         return nullptr;
+//     }
+//     char *t, *buf;
+//     FileNode *now = root;
+//     buf = new char[50];
+//     while (path = split_path_name(path, buf)[0])
+//     {
+//         now=find_child_name(now, buf);
+//         if (now->TYPE&FileNode::__VFS)
+//         {
+//             re=path;
+//             delete[] buf;
+//             return now;
+//         }
+//     }
+//     delete[] buf;
+//     re=path;
+//     return nullptr;
+// }
 
-bool VFSM::Destroy()
-{
-    return false;
-}
+// bool VFSM::Init()
+// {
+//     root = new FileNode(nullptr, FileNode::__DIR | FileNode::__ROOT);
+//     FileNode *p = new FileNode(nullptr, FileNode::__DIR);
+//     p->set_name((char *)"VFS");
+//     add_new_node(root, p);
+//     return true;
+// }
+
+// bool VFSM::Destroy()
+// {
+//     return false;
+// }
+
+// bool VFSM::load_vfs(VFS *vfs, char *path)
+// {
+//     FileNode *t;
+//     t = get_node(path);
+//     if (t != nullptr)
+//     {
+//         t->vfs = vfs;
+//         return true;
+//     }
+//     return false;
+// }

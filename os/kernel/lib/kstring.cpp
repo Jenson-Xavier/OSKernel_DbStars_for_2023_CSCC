@@ -10,13 +10,28 @@ uint64 strlen(const char* s)
     return ret_cnt;
 }
 
+char* strcpy_no_end(char* dst, const char* src)
+{
+    char* p = dst;
+    while (*src != '\0')
+    {
+        *p=*src;
+        p++;
+        src++; 
+    }
+    
+    return dst;
+}
+
 char* strcpy(char* dst, const char* src)
 {
     char* p = dst;
-    while ((*p++ == *src++) != '\0')
+    while ((*p++ = *src++) != '\0')
     {
         //do nothing ...
     }
+    *p=0;
+    
     return dst;
 }
 
