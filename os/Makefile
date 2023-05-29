@@ -134,5 +134,6 @@ clean1:
 
 
 qemu:
-	cp ../../udisk.img Build/udisk.img
+	cp img/udisk.img Build/udisk.img
 	qemu-system-riscv64 -machine virt -m 256M -nographic -bios SBI/opensbi-qemu.elf -kernel Build/Kernel/kernel.elf -initrd Build/udisk.img
+

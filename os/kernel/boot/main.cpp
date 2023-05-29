@@ -375,7 +375,7 @@ int main()
     FAT32 fat;
     FAT32FILE *t;
     char *buf;
-    t = fat.open("/wdnmd/abc.txt");
+    t = fat.open("/test.img");
     t->show();
 
     // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
@@ -383,7 +383,7 @@ int main()
 
     buf = new char[t->table.size];
     fat.read(t,(unsigned char *)buf,t->table.size);
-    kout<<buf;
+    kout.memory(buf,buf+t->table.size);
     // fat.write(t,(unsigned char *)"hello",6);
     // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
     // t->show();
