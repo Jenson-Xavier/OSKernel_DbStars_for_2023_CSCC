@@ -16,6 +16,7 @@
     };
 
 resource_declare(test_img);
+resource_declare(test2_img);
 
 #define get_resource_begin(name)    (_binary_Build_##name##_start)
 #define get_resource_end(name)      (_binary_Build_##name##_end)

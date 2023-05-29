@@ -3,7 +3,7 @@
 // VFSM vfsm;
 
 // FileNode
-int64 FileNode::read(void *dst, uint64 pos, uint64 size)
+int64 FileNode::read(void* dst, uint64 pos, uint64 size)
 {
     return -1;
 }
@@ -13,7 +13,7 @@ bool FileNode::del()
     return true;
 }
 
-int64 FileNode::write(void *src, uint64 pos, uint64 size)
+int64 FileNode::write(void* src, uint64 pos, uint64 size)
 {
     return -1;
 }
@@ -23,13 +23,13 @@ int64 FileNode::size()
     return fileSize;
 }
 
-bool FileNode::ref(FileHandle *f)
+bool FileNode::ref(FileHandle* f)
 {
     RefCount++;
     return true;
 }
 
-bool FileNode::unref(FileHandle *f)
+bool FileNode::unref(FileHandle* f)
 {
     RefCount--;
     return true;
@@ -46,7 +46,7 @@ uint64 FileNode::get_path_len(uint8 _flag)
     return parent->get_path_len(_flag) + 1 + strlen(name);
 }
 
-char *FileNode::get_path_copy(char *dst, uint8 _flag)
+char* FileNode::get_path_copy(char* dst, uint8 _flag)
 {
     if (_flag & (TYPE & __VFS))
         return dst;
@@ -56,12 +56,13 @@ char *FileNode::get_path_copy(char *dst, uint8 _flag)
         return dst;
     else
     {
-        char *s = parent->get_path_copy(dst, _flag);
+        char* s = parent->get_path_copy(dst, _flag);
         *s = '/';
-        return strcpy(s + 1, name);
+        return strcpy_s(s + 1, name);
     }
 }
-void FileNode::set_parent(FileNode *_parent)
+
+void FileNode::set_parent(FileNode* _parent)
 {
     if (_parent == nullptr)
     {
@@ -93,7 +94,7 @@ void FileNode::set_parent(FileNode *_parent)
         next->pre = this;
 }
 
-bool FileNode::set_name(char *_name)
+bool FileNode::set_name(char* _name)
 {
     if (name != nullptr)
         delete name;
@@ -105,25 +106,25 @@ bool FileNode::set_name(char *_name)
     return true;
 }
 
-char *FileNode::get_path(uint8 _flag)
+char* FileNode::get_path(uint8 _flag)
 {
     uint64 len = get_path_len(_flag);
     if (len == 0)
     {
-        char *re = (char *)pmm.malloc(2 * sizeof(char));
+        char* re = (char*)pmm.malloc(2 * sizeof(char));
         strcpy(re, "/");
         return re;
     }
     else
     {
-        char *re = (char *)pmm.malloc(len * sizeof(char) + 1);
+        char* re = (char*)pmm.malloc(len * sizeof(char) + 1);
         get_path_copy(re, _flag);
         re[len] = 0;
         return re;
     }
 }
 
-const char *FileNode::get_name()
+const char* FileNode::get_name()
 {
     return name;
 }
@@ -133,11 +134,12 @@ bool FileNode::IsDir()
     return TYPE & __DIR;
 }
 
-FileNode::FileNode(VFS *_VFS, uint64 _type)
+FileNode::FileNode(VFS* _VFS, uint64 _type)
 {
     vfs = _VFS;
     TYPE = _type;
 }
+
 FileNode::~FileNode()
 {
     while (child)
@@ -216,7 +218,7 @@ FileNode::~FileNode()
 //     {
 //         return false;
 //     }
-    
+
 //     t->del();
 
 //     return true;

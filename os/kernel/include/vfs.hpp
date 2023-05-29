@@ -7,7 +7,7 @@
 #include <kout.hpp>
 #include <pathtool.hpp>
 
-inline const char *INVALIDPATHCHAR()
+inline const char* INVALIDPATHCHAR()
 {
     return "/\\:*?\"<>|";
 }
@@ -32,36 +32,36 @@ private:
         __SPECICAL = 1ull << 6,
     };
 
-    char *name = nullptr;
-    VFS *vfs = nullptr;
+    char* name = nullptr;
+    VFS* vfs = nullptr;
     uint64 TYPE;
-    FileNode *parent = nullptr,
-             *pre = nullptr,
-             *next = nullptr,
-             *child = nullptr;
+    FileNode* parent = nullptr,
+        * pre = nullptr,
+        * next = nullptr,
+        * child = nullptr;
 
     uint64 fileSize = 0;
     uint32 RefCount = 0;
 
 
-    void set_parent(FileNode *_parent);//只改变树结构而不改变实际存储结构
+    void set_parent(FileNode* _parent);//只改变树结构而不改变实际存储结构
     uint64 get_path_len(uint8 _flag);//为1时为vfs路径长度，为0时为全局路径长度
-    char *get_path_copy(char *dst, uint8 _flag);
+    char* get_path_copy(char* dst, uint8 _flag);
 
 public:
-    virtual int64 read(void *dst, uint64 pos, uint64 size);
-    virtual int64 write(void *src, uint64 pos, uint64 size);
+    virtual int64 read(void* dst, uint64 pos, uint64 size);
+    virtual int64 write(void* src, uint64 pos, uint64 size);
     virtual int64 size();
-    virtual bool ref(FileHandle *f);
-    virtual bool unref(FileHandle *f);
-    virtual const char *get_name();
-    virtual bool set_name(char *_name);
-    virtual char *get_path(uint8 _flag); //_flag=0 绝对路径   1 vfs路径
+    virtual bool ref(FileHandle* f);
+    virtual bool unref(FileHandle* f);
+    virtual const char* get_name();
+    virtual bool set_name(char* _name);
+    virtual char* get_path(uint8 _flag); //_flag=0 绝对路径   1 vfs路径
     virtual bool IsDir();
     virtual bool del();
-    
 
-    FileNode(VFS *_VFS, uint64 _flags);
+
+    FileNode(VFS* _VFS, uint64 _flags);
     virtual ~FileNode();
 };
 
@@ -83,7 +83,7 @@ public:
 //     // FileNode *find_vfs(char *path, char *&re);
 //     // FileNode *find_vfs(char *path);
 //     FileNode * get_node(char * path);
-    
+
 
 //     bool Init();
 //     bool Destroy();
@@ -93,19 +93,19 @@ public:
 class VFS
 {
 private:
-    FileNode * root;
+    FileNode* root;
 public:
-    virtual char *FileSystemName(){};
-    VFS(){};
-    virtual ~VFS(){};
+    virtual char* FileSystemName() {};
+    VFS() {};
+    virtual ~VFS() {};
 
-    virtual FileNode *open(char *path) = 0;
-    virtual bool close(FileNode *p) = 0;
+    virtual FileNode* open(char* path) = 0;
+    virtual bool close(FileNode* p) = 0;
 
-    virtual FileNode * create_dir(const char *path)=0;
-    virtual FileNode * create_file(const char *path)=0;
-    virtual FileNode * get_node(const char *path)=0;
-    virtual bool del(const char *path)=0;
+    virtual FileNode* create_dir(const char* path) = 0;
+    virtual FileNode* create_file(const char* path) = 0;
+    virtual FileNode* get_node(const char* path) = 0;
+    virtual bool del(const char* path) = 0;
 
 };
 

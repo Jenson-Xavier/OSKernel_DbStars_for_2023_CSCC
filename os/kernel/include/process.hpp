@@ -18,6 +18,7 @@
 #define EmbedUserProcessStackAddr   0x80000000 - EmbedUserProcessStackSize
 
 class VMS;                  // 前置声明 可以作为类型引用
+class SEMAPHORE;            // 同样 信号量的前置声明
 
 // 定义控制进程的进程单元结构体 即实现进程控制块PCB 
 // 当然还有需要进程切换的进程上下文Context
@@ -76,31 +77,35 @@ struct proc_struct
 
     clock_t timebase;           // Round Robin时间片轮转调度实现需要 计时起点
     clock_t runtime;            // 进程运行的时间
-    clock_t sleeptime;          // 挂起态等待时间(保留设计 暂不使用)
+    clock_t trap_sys_timebase;  // 为用户进程设计的 记录当前陷入系统调用时的起始时刻
+    clock_t systime;            // 为用户设计的时间 进行系统调用陷入核心态的时间
+    clock_t sleeptime;          // 挂起态等待时间 wait系统调用会更新 其他像时间等系统调用会使用
+    clock_t waittime_limit;     // 进程睡眠需要 设置睡眠时间的限制 当sleeptime达到即可自唤醒
     clock_t readytime;          // 就绪态等待时间(保留设计 暂不使用)
 
     int ku_flag;                // flag标志是内核级还是用户级进程
-    
+
     void* kstack;               // 内核栈地址
     uint32 kstacksize;          // 内核栈大小 rv64下默认采取16KB实现
-    
+
     // 链接部分
-    proc_struct* pid_fa;        // 到父进程的进程结构体 这里使用指针 方便确保进程树的关系不乱
-    proc_struct* pid_bro_pre;   // 到兄弟进程 pre方向
-    proc_struct* pid_bro_next;  // 到兄弟进程 next方向
-    proc_struct* pid_fir_child; // 到第一个孩子进程
-    
+    proc_struct* fa;            // 到父进程的进程结构体 这里使用指针 方便确保进程树的关系不乱
+    proc_struct* bro_pre;       // 到兄弟进程 pre方向
+    proc_struct* bro_next;      // 到兄弟进程 next方向
+    proc_struct* fir_child;     // 到第一个孩子进程
+
     // reg_context context;     // 轻量级上下文 弃用...
     TRAPFRAME* context;         // 利用trapframe结构进行进程上下文的处理 更加清晰和统一 其直接分配在内核栈上
 
     VMS* vms;                   // 虚拟内存关键VMS指针 管理虚存和物存空间
-    
+
     char name[PROC_NAME_LEN];   // 进程名称
 
     int exit_value;             // 后续系统调用需要 退出状态值(具体使用场景暂无)
-    
-    // ... IPC进程通信部分
-    
+    int flags;                  // 后续系统调用需要 进程的标志
+
+    SEMAPHORE* sem;             // 每个进程设计一个信号量指针(类的例化问题) 用于初步IPC和wait系统调用
+
     // ... File System文件系统部分
 };
 
@@ -129,13 +134,14 @@ public:
     void Init();                                    // PM类初始化函数
     void show(proc_struct* proc);                   // 打印一个proc结构相关信息 用于调试
     void print_all_list();                          // 打印进程链表所有进程节点信息 便于调试
-    
+
     proc_struct* alloc_proc();                      // 管理分配一个新进程
     int get_unique_pid();                           // 得到一个独特的pid用来分配
-    bool init_proc(proc_struct* proc, int ku_flag); // 初始化一个进程
+    bool init_proc(proc_struct* proc, int ku_flag,  // 初始化一个进程
+        int flags = 0);
     proc_struct* get_proc(int pid);                 // 从进程号pid得到一个进程实例
     bool free_proc(proc_struct* proc);              // 释放一个以及分配的进程的资源和空间
-    
+
     inline proc_struct* get_cur_proc()              // 获取当前正在执行的进程实例
     {
         return cur_proc;
@@ -159,20 +165,33 @@ public:
     bool switchstat_proc(proc_struct* proc, uint32 tar_stat);               // 改变一个进程的状态
     bool set_proc_name(proc_struct* proc, char* name);                      // 设置一个进程的名称
     bool set_proc_kstk(proc_struct* proc, void* kaddr, uint32 size);        // 设置进程内核栈
-    bool copy_otherprocs(proc_struct* dst, proc_struct* src);               // 进程间的拷贝
+    void user_proc_help_init(proc_struct* dst, proc_struct* src);           // 新旧进程间的迁移
+    void copy_other_proc(proc_struct* dst, proc_struct* src);               // 进程间一些基础信息的拷贝
     void run_proc(proc_struct* proc);                                       // 暂优先运行一个进程
     void rest_proc(proc_struct* proc);                                      // 暂停一个进程
     void kill_proc(proc_struct* proc);                                      // 杀死一个进程
     void exit_proc(proc_struct* proc, int ec);                              // 进程退出函数
     bool set_proc_vms(proc_struct* proc, VMS* vms);                         // 设置进程的VMS属性
+    void set_fa_proc(proc_struct* proc, proc_struct* fa_proc);              // 设置进程的父进程
+    clock_t get_proc_rumtime(proc_struct* proc, bool need_update);          // 获取进程的运行时间(是否需要更新)
+    clock_t get_proc_systime(proc_struct* proc, bool need_update);          // 获取用户进程的系统调用核心态时间(是否需要更新)
+    void set_systiembase(proc_struct* proc);                                // 设置用户进程陷入系统调用的计时起点(触发系统调用时执行)
+    void calc_systime(proc_struct*, bool is_wait = 0);                      // 累加计算更新用户的核心态运行时间 is_wait判断是否需要减去sleep的time
+    void set_waittime_limit(proc_struct* proc, clock_t waittime_limit);     // 进程睡眠时设置睡眠时长的限制
     
     bool start_kernel_proc(proc_struct* proc,       // 通过给定的函数启动内核线程
-        int (*func)(void*), void* arg);             
-    bool start_user_proc(proc_struct* proc,         // 通过给定的函数启动用户进程(内核创建用户函数 几乎不会使用)
         int (*func)(void*), void* arg);
+
     bool start_user_proc(proc_struct* proc,         // 通过用户映像启动用户进程
         uint64 user_start_addr);
-        // ... 文件系统相关
+
+    bool start_user_proc(proc_struct* proc,         // 通过给定的函数和用户启动地址启动用户进程
+        int (*func)(void*), void* arg, uint64 user_start_addr);
+    
+    void switch_kernel_to_user(proc_struct* proc,   // 用户执行完特定的启动函数转为用户态
+        uint64 user_start_addr);
+
+    // ... 文件系统相关
 };
 
 // 创建内核进程的通用全局函数
@@ -180,6 +199,9 @@ proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name);
 
 // 创建用户进程的全局函数(内核嵌入用户进程映像实现的)
 proc_struct* CreateUserImgProcess(uint64 img_start, uint64 img_end, char* name = (char*)"");
+
+// 从特定启动函数创建用户进程(内核嵌入用户进程映像实现的)
+proc_struct* CreateUserImafromFunc(int (*func)(void*), void* arg, uint64 img_start, uint64 img_end, char* name = (char*)"");
 
 extern ProcessManager pm;
 

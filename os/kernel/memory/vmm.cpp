@@ -305,7 +305,8 @@ bool VMS::SolvePageFault(TRAPFRAME* tf)
     VMR* t = find((void*)(tf->badvaddr));
     if (t == nullptr)
     {
-        kout[red] << "Invalid addr" << endl;
+        kout[red] << "Invalid Addr : ";
+        kout[red] << Hex(tf->badvaddr) << endl;
         return false;
     }
 
@@ -363,21 +364,22 @@ bool trap_PageFault(TRAPFRAME* tf)
     return VMS::GetCurVMS()->SolvePageFault(tf);
 }
 
-void * operator new(size_t size)
+void* operator new(size_t size)
 {
     return pmm.malloc(size);
 }
 
-void * operator new[](size_t size)
+void* operator new[](size_t size)
 {
     return pmm.malloc(size);
 }
-void  operator delete(void * p,size_t size)
-{
-    pmm.free(p);
-}
-void  operator delete[](void * p)
+
+void operator delete(void* p, size_t size)
 {
     pmm.free(p);
 }
 
+void operator delete[](void* p)
+{
+    pmm.free(p);
+}

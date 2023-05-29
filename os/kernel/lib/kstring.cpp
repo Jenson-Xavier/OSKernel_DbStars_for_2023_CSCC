@@ -10,20 +10,20 @@ uint64 strlen(const char* s)
     return ret_cnt;
 }
 
-char* strcpy_no_end(char* dst, const char* src)
+// 直接在参数里修改
+void strcpy(char* dst, const char* src)
 {
-    char* p = dst;
     while (*src != '\0')
     {
-        *p=*src;
-        p++;
-        src++; 
+        *dst = *src;
+        src++;
+        dst++;
     }
-    
-    return dst;
+    *dst = '\0';
 }
 
-char* strcpy(char* dst, const char* src)
+// 用返回值作为修改后的字符串
+char* strcpy_s(char* dst, const char* src)
 {
     char* p = dst;
     while ((*p++ = *src++) != '\0')
@@ -32,6 +32,18 @@ char* strcpy(char* dst, const char* src)
     }
     *p=0;
     
+    return dst;
+}
+
+char* strcpy_no_end(char* dst, const char* src)
+{
+    char* p = dst;
+    while (*src != '\0')
+    {
+        *p = *src;
+        p++;
+        src++;
+    }
     return dst;
 }
 

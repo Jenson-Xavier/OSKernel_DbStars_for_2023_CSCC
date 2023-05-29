@@ -1,4 +1,4 @@
-all: Build/test.img Build/Kernel/kernel.elf 
+all: Build/test.img Build/test2.img Build/Kernel/kernel.elf 
 
 #Kernel部分:
 
@@ -6,8 +6,9 @@ Build/Kernel/kernel.elf :Build/Kernel/main.elf Build/Kernel/start.elf Build/Kern
 Build/Kernel/kstring.elf Build/Kernel/trap.elf Build/Kernel/trapEntry.elf Build/Kernel/clock.elf \
 Build/Kernel/interrupt.elf Build/Kernel/pmm.elf Build/Kernel/vmm.elf Build/Kernel/process.elf \
 Build/Kernel/syscall.elf Build/Kernel/Process_S.elf Build/Kernel/spinlock.elf Build/Kernel/mutex.elf \
-Build/Kernel/semaphore.elf Build/Kernel/pathtool.elf  Build/Kernel/ramdisk_driver.elf Build/Kernel/FAT32.elf\
-#Build/Kernel/vfs.elf   Build/Kernel/fat32.elf
+Build/Kernel/semaphore.elf Build/Kernel/pathtool.elf Build/Kernel/ramdisk_driver.elf \
+Build/Kernel/FAT32.elf \
+#Build/Kernel/vfs.elf Build/Kernel/fat32.elf
 	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld \
 	Build/Kernel/main.elf \
 	Build/Kernel/start.elf \
@@ -31,7 +32,6 @@ Build/Kernel/semaphore.elf Build/Kernel/pathtool.elf  Build/Kernel/ramdisk_drive
 
 #Build/Kernel/vfs.elf \    
 #Build/Kernel/fat32.elf \  //暂时停止
-
 
 # Build/Kernel/kernel.elf :Build/Kernel/*.elf
 # 	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld Build/Kernel/*.elf
@@ -73,6 +73,13 @@ Build/Kernel/pmm.elf:kernel/memory/pmm.cpp
 Build/Kernel/vmm.elf:kernel/memory/vmm.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/memory/vmm.cpp -o Build/Kernel/vmm.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
 
+#process
+Build/Kernel/process.elf:kernel/process/process.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/process.cpp -o Build/Kernel/process.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
+Build/Kernel/Process_S.elf:kernel/process/Process.S
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Kernel/Process_S.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
 #file
 Build/Kernel/vfs.elf:kernel/file/vfs.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/vfs.cpp -o Build/Kernel/vfs.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
@@ -90,13 +97,6 @@ Build/Kernel/FAT32.elf:kernel/file/FAT32.cpp
 Build/Kernel/ramdisk_driver.elf:kernel/driver/ramdisk_driver.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/driver/ramdisk_driver.cpp -o Build/Kernel/ramdisk_driver.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
 
-#process
-Build/Kernel/process.elf:kernel/process/process.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/process.cpp -o Build/Kernel/process.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
-
-Build/Kernel/Process_S.elf:kernel/process/Process.S
-	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Kernel/Process_S.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
-
 #synchronize
 Build/Kernel/spinlock.elf:kernel/synchronize/spinlock.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/spinlock.cpp -o Build/Kernel/spinlock.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
@@ -111,14 +111,17 @@ Build/Kernel/semaphore.elf:kernel/synchronize/semaphore.cpp
 
 #library
 Build/User/usermain.o:user/library/usermain.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c user/library/usermain.cpp -o Build/User/usermain.o -I"kernel/include" -I"user/library" -mcmodel=medany  -fno-exceptions -fno-rtti
+	riscv64-unknown-elf-g++ -nostdlib -c user/library/usermain.cpp -o Build/User/usermain.o -I"kernel/include" -I"user/library" -mcmodel=medany -fno-exceptions -fno-rtti
 
 Build/User/userstart.o:user/library/userstart.S
-	riscv64-unknown-elf-g++ -nostdlib -c user/library/userstart.S -o Build/User/userstart.o	-I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+	riscv64-unknown-elf-g++ -nostdlib -c user/library/userstart.S -o Build/User/userstart.o	-I"kernel/include" -I"user/library" -mcmodel=medany -fno-exceptions -fno-rtti
+
+Build/User/clone.o:user/library/clone.S
+	riscv64-unknown-elf-g++ -nostdlib -c user/library/clone.S -o Build/User/clone.o	-I"kernel/include" -I"user/library" -mcmodel=medany
 
 #user test.cpp
 Build/User/test.o:user/test.cpp
-	riscv64-unknown-elf-g++ -nostdlib -c user/test.cpp -o Build/User/test.o -I"kernel/include" -I"user/library" -mcmodel=medany 
+	riscv64-unknown-elf-g++ -nostdlib -c user/test.cpp -o Build/User/test.o -I"kernel/include" -I"user/library" -mcmodel=medany
 
 Build/User/test.elf:Build/User/test.o Build/User/usermain.o Build/User/userstart.o
 	riscv64-unknown-elf-ld -o Build/User/test.elf -T Linker/user.ld Build/User/test.o Build/User/usermain.o Build/User/userstart.o
@@ -126,14 +129,22 @@ Build/User/test.elf:Build/User/test.o Build/User/usermain.o Build/User/userstart
 Build/test.img:Build/User/test.elf
 	riscv64-unknown-elf-objcopy Build/User/test.elf --strip-all -O binary Build/test.img
 
+#user test2.cpp
+Build/User/test2.o:user/test2.cpp user/
+	riscv64-unknown-elf-g++ -nostdlib -c user/test2.cpp -o Build/User/test2.o -I"kernel/include" -I"user/library" -mcmodel=medany
+
+Build/User/test2.elf:Build/User/test2.o Build/User/usermain.o Build/User/userstart.o Build/User/clone.o
+	riscv64-unknown-elf-ld -o Build/User/test2.elf -T Linker/user.ld Build/User/clone.o Build/User/test2.o Build/User/usermain.o Build/User/userstart.o 
+
+Build/test2.img:Build/User/test2.elf
+	riscv64-unknown-elf-objcopy Build/User/test2.elf --strip-all -O binary Build/test2.img
+
 clean:
 	rm Build/* Build/Kernel/* Build/User/*
 
 clean1:
 	rm Build/Kernel/kernel.elf
 
-
 qemu:
 	cp img/udisk.img Build/udisk.img
 	qemu-system-riscv64 -machine virt -m 256M -nographic -bios SBI/opensbi-qemu.elf -kernel Build/Kernel/kernel.elf -initrd Build/udisk.img
-

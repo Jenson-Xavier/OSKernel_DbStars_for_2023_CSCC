@@ -53,7 +53,7 @@ void trap_fail_info(TRAPFRAME* tf)
     // 需要对还没有实现的中断异常设置这个函数
     // 能极大地方便我们的调试工作
     kout[red] << "Trap Failed !" << endl;
-    kout[green] << "Type:" << (void*)tf->cause << endl;
+    kout[green] << "Type:" << Hex(tf->cause) << endl;
     kout[green] << "Name:";
     if ((int64)tf->cause < 0)
     {
@@ -63,9 +63,9 @@ void trap_fail_info(TRAPFRAME* tf)
     {
         kout[green] << trap_excp_code_name[tf->cause] << endl;
     }
-    kout[green] << "tval:" << (void*)tf->badvaddr << endl;
-    kout[green] << "status:" << (void*)tf->status << endl;
-    kout[green] << "epc:" << (void*)tf->epc << endl;
+    kout[green] << "tval:" << Hex(tf->badvaddr) << endl;
+    kout[green] << "status:" << Hex(tf->status) << endl;
+    kout[green] << "epc:" << Hex(tf->epc) << endl;
 }
 
 extern "C"
@@ -147,13 +147,18 @@ extern "C"
                 trap_fail_info(tf);
                 break;
             case CAUSE_BREAKPOINT:
-                // 执行ebreak调用触发断点异常 从而实现进程退出的回收
-                // 通过内联汇编已经将参数中的a7寄存器设置为1
                 switch (tf->reg.a7)
                 {
                 case 1:
+                    // 执行ebreak调用触发断点异常 从而实现内核进程退出的回收
+                    // 通过内联汇编已经将参数中的a7寄存器设置为1
                     kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " and Exit!" << endl;
                     // pm.print_all_list();
+                    return pm.proc_scheduler(tf);
+                case 2:
+                    // 为2时表示在S态将从特定函数启动的用户进程转为用户态并进行一次调度
+                    kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " switch to U!" << endl;
+                    // kout[purple] << pm.get_cur_proc()->context->status << endl;
                     return pm.proc_scheduler(tf);
                 }
                 break;
@@ -165,8 +170,12 @@ extern "C"
                 break;
             case CAUSE_USER_ECALL:
                 // 系统调用部分 用户触发USER_ECALL异常
-                trap_Syscall(tf);
-                tf->epc += 4;           // 将sepc指向ecall的下一条指令地址处
+                // 用户陷入核心态 需要记录用户的运行时间中在核心态的部分
+                pm.set_systiembase(pm.get_cur_proc());  // 这个时候陷入系统调用了
+                trap_Syscall(tf);                       // 将sepc指向ecall的下一条指令地址处
+                tf->epc += 4;
+                // 结束系统调用了 中断屏蔽效果保证正确性 即使是exit调用 调度机制保证不会执行到这里
+                pm.calc_systime(pm.get_cur_proc(), tf->reg.a7 == Sys_wait4);
                 break;
             case CAUSE_SUPERVISOR_ECALL:
             case CAUSE_HYPERVISOR_ECALL:
@@ -178,7 +187,11 @@ extern "C"
             case CAUSE_STORE_PAGE_FAULT:
                 // 缺页中断异常
                 // kout[yellow] << "PAGE_FAULT" << endl;
-                trap_PageFault(tf);
+                if (!trap_PageFault(tf))
+                {
+                    trap_fail_info(tf);
+                    pm.exit_proc(pm.get_cur_proc(), -1);
+                }
                 break;
             default:
                 trap_fail_info(tf);
@@ -202,7 +215,7 @@ void show_reg(TRAPFRAME* tf)
     {
         kout[yellow] << (*tf).reg.x[i] << endl;
     }
-    kout[yellow] << (*tf).status << endl;
+    kout[red] << (*tf).status << endl;
     kout[yellow] << (*tf).epc << endl;
     kout[yellow] << (*tf).badvaddr << endl;
     kout[yellow] << (*tf).cause << endl;

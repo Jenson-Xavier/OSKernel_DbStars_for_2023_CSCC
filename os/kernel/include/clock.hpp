@@ -5,6 +5,8 @@
 
 typedef uint64  clock_t;
 
+const clock_t timer_1ns = 0;
+const clock_t timer_1us = 10;
 const clock_t timer_1ms = 1e4;              // QEMU上 时钟频率1e7Hz 1个时钟中断1ms->1e4
 const clock_t timer_10ms = timer_1ms * 10;
 const clock_t timer_100ms = timer_1ms * 100;

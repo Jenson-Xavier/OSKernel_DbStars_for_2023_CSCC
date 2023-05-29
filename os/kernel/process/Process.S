@@ -8,15 +8,13 @@ KernelProcessEntry:
     jal KernelProcessExit
 
 UserProcessEntry:
+    # 这个入口是为了专门需要从特定函数启动的用户进程实现的
     .global UserProcessEntry
-    beqz s0,UserProcessEntry2
-    # 下面这层逻辑事实上是并不符合用户进程的
-    # 除了修改了特权级状态其他无异
-    # 跳转了之后才算得上是用户进程和内核的隔离
     move a0,s1
     jalr s0
-    move a0,s2
-    jal KernelProcessExit
-
-UserProcessEntry2:
-    j TrapRet
+    move a0,s2      # 进程结构体指针的参数
+    move a1,s3      # 用户进程加载或启动地址的参数
+    # 当用户进程的特定启动函数执行完成后
+    # 将这个用户进程控制块作为参数传递
+    # 并跳转到特定函数 转换到用户进程状态
+    jal KerneltoUserProcess

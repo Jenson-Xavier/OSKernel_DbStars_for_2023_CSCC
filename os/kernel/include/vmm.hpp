@@ -140,6 +140,20 @@ union VMR_FLAG
     };
 };
 
+// 对于上述union实现的权限标志位的表示
+// 为了方便开发 对于一些常用的权限结合的表示
+// 使用枚举预先处理
+enum VMR_flags
+{
+    VM_rw = 0b11,
+    VM_rwx = 0b111,
+    VM_kernel = 0b100111,
+    VM_userstack = 0b1000001011,
+    VM_userheap = 0b1000010011,
+    VM_mmio = 0b10100011,
+    VM_test = 0b1100011
+};
+
 class VMR
 {
     friend class VMS;
@@ -200,6 +214,16 @@ public:
 
     static bool Static_Init();              // 初始化内核空间时使用
 
+    inline VMR* GetVMRHead()
+    {
+        return Head;
+    }
+
+    inline uint64 GetVMRCount()
+    {
+        return VMRCount;
+    }
+
     inline static VMS* GetKernelVMS()
     {
         return KernelVMS;
@@ -238,6 +262,8 @@ public:
 #endif
     }
 
+    void create_from_vms(VMS* vms);         // 进程间的拷贝需要 新建一个vms但是内容拷贝至其他的vms
+
     void Enter();                           // 将当前空间切换到该实例所表示的空间
     void Leave();                           // 切换到内核空间
 
@@ -254,8 +280,5 @@ void * operator new(size_t size);
 void * operator new[](size_t size);
 void  operator delete(void * p,uint64 size);
 void  operator delete[](void * p);
-
-
-
 
 #endif

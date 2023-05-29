@@ -53,7 +53,7 @@ bool ProcessQueueManager::isempty_pq(proc_queue& pq)
     {
         return true;
     }
-    if (ptr->next != nullptr)
+    if (ptr->next == nullptr)
     {
         return true;
     }
@@ -128,7 +128,7 @@ void SEMAPHORE::init(int intr_val)
 
 int SEMAPHORE::wait(proc_struct* proc)
 {
-    // 关闭终端和加自旋锁都是为了保证信号量操作的原子性
+    // 关闭中断和加自旋锁都是为了保证信号量操作的原子性
     bool intr_flag;
     intr_save(intr_flag);
     spin_lock.lock();
@@ -142,7 +142,6 @@ int SEMAPHORE::wait(proc_struct* proc)
         // 这样强信号量的设计可以被证明可以保证互斥场景下不会饥饿的情况
         // 而如果不设计队列而只是改变状态这里就会可能出现饥饿的情况
         pm.switchstat_proc(proc, Proc_sleeping);
-        // 立即触发调度器 从而实现立即的进程切换功能
         value--;
     }
     else
@@ -152,6 +151,12 @@ int SEMAPHORE::wait(proc_struct* proc)
     }
     spin_lock.unlock();
     intr_restore(intr_flag);
+    if (value < 0)
+    {
+        // 中断开关的原因导致调度需要安排在这里
+        // 立即触发调度器 从而实现立即的进程切换功能
+        pm.imme_trigger_schedule();
+    }
     return value;
 }
 
@@ -177,4 +182,21 @@ void SEMAPHORE::signal(proc_struct* proc)
     intr_restore(intr_flag);
 }
 
+bool SEMAPHORE::destroy()
+{
+    // 当这个信号量的进程队列上没有等待的进程时
+    // 才可以销毁这个信号量的进程队列
+    if (pqm.isempty_pq(wait_pq))
+    {
+        pqm.destroy_pq(wait_pq);
+        return true;
+    }
+    else
+    {
+        kout[red] << "The Semaphore's wait queue is NOT Empty!" << endl;
+        return false;
+    }
+}
+
+// 提供给全局任意使用
 SEMAPHORE semaphore;

@@ -4,7 +4,8 @@
 
 int main()
 {
-    char ch = u_getchar();
+    // char ch = u_getchar();
+    char ch = 'U';
     u_putchar(ch);
     return 0;
 }

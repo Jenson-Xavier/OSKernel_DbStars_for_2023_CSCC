@@ -23,7 +23,7 @@ struct DBR
 
 union FATtable
 {
-    
+
     struct
     {
         char name[8];
@@ -55,7 +55,7 @@ union FATtable
         uint8 lname2[4];
     };
 
-    int32 get_name(char *REname); // 返回值为-1时说明无效，0为短名称，大于1的序列为长名称(长名称无法完成拷贝)
+    int32 get_name(char* REname); // 返回值为-1时说明无效，0为短名称，大于1的序列为长名称(长名称无法完成拷贝)
 };
 
 
@@ -72,7 +72,7 @@ public:
         __LINK = 1ull << 5,
         __SPECICAL = 1ull << 6,
     };
-    char *name = nullptr;
+    char* name = nullptr;
     uint32 TYPE;
     FATtable table;
     uint64 table_clus_pos;
@@ -92,33 +92,33 @@ private:
 
 
     FAT32Device dev;
-    unsigned char * temp;
+    unsigned char* temp;
 public:
 
     uint64 clus_to_lba(uint64 clus);
     uint64 lba_to_clus(uint64 lba);
-    FAT32FILE *  get_child_form_clus(char *child_name, uint64 src_lba);//返回文件table
-    bool get_clus(uint64 clus, unsigned char *buf);
-    bool set_clus(uint64 clus, unsigned char *buf);
+    FAT32FILE* get_child_form_clus(char* child_name, uint64 src_lba);//返回文件table
+    bool get_clus(uint64 clus, unsigned char* buf);
+    bool set_clus(uint64 clus, unsigned char* buf);
     bool init();
     FAT32();
     ~FAT32();
-    FAT32FILE * find_file_by_path(char *path);
-    FAT32FILE * open(char * path);
-    bool close(FAT32FILE * p);
-    bool create_file(char * path,char * fileName);
-    int read(FAT32FILE * src,unsigned char * buf,uint64 size);
-    bool write(FAT32FILE * dst,unsigned char * src,uint64 size);
+    FAT32FILE* find_file_by_path(char* path);
+    FAT32FILE* open(char* path);
+    bool close(FAT32FILE* p);
+    bool create_file(char* path, char* fileName);
+    int read(FAT32FILE* src, unsigned char* buf, uint64 size);
+    bool write(FAT32FILE* dst, unsigned char* src, uint64 size);
     // uint64 clus_off_in_fat(uint64 clus);
     // uint64 clus_sector_in_fat(uint64 clus);
     uint64 find_empty_clus();
-    bool del_file(FAT32FILE * file);
+    bool del_file(FAT32FILE* file);
 
-    bool set_table(FAT32FILE * file);
+    bool set_table(FAT32FILE* file);
 
     uint32 get_next_clus(uint32 clus);
-    bool set_next_clus(uint32 clus,uint32 nxt_clus);
-     
+    bool set_next_clus(uint32 clus, uint32 nxt_clus);
+
 };
 
 #endif

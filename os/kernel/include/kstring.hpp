@@ -7,14 +7,6 @@
 #include <type.hpp>
 #include <sbi.h>
 
-
-inline bool isdigit(char c)
-{
-    if (c<='9'&&c>='0')
-        return true;
-    return false;
-}
-
 // 做一个简单的封装
 inline void putchar(char ch)
 {
@@ -44,6 +36,13 @@ inline int getchar()
     return ret_ch;
 }
 
+inline bool isdigit(char c)
+{
+    if (c <= '9' && c >= '0')
+        return true;
+    return false;
+}
+
 inline int gets(char buf[], int buffersize)
 {
     int i = 0;
@@ -65,22 +64,24 @@ inline int gets(char buf[], int buffersize)
     return i;
 }
 
-inline bool isInStr(char tar,const char * src)
+inline bool isInStr(char tar, const char* src)
 {
     while (*src)
     {
-        if (tar==*src)
-            return true ;
-        
+        if (tar == *src)
+            return true;
+
         src++;
     }
     return false;
-    
 }
 
 uint64 strlen(const char* s);
 
-char* strcpy(char* dst, const char* src);
+void strcpy(char* dst, const char* src);
+
+char* strcpy_s(char* dst, const char* src);
+
 char* strcpy_no_end(char* dst, const char* src);
 
 int strcmp(const char* s1, const char* s2);

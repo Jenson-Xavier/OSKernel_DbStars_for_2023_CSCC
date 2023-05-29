@@ -3,6 +3,7 @@
 #include <kstring.hpp>
 #include <Riscv.h>
 #include <interrupt.hpp>
+#include <semaphore.hpp>
 
 // 定义idle进程
 proc_struct* idle_proc = nullptr;
@@ -19,10 +20,10 @@ void ProcessManager::show(proc_struct* proc)
         << "proc kuflag : " << proc->ku_flag << endl
         << "proc kstack : " << Hex((uint64)proc->kstack) << endl
         << "proc kstacksize : " << proc->kstacksize << endl
-        << "proc pid_fa : " << proc->pid_fa << endl
-        << "proc pid_bro_pre : " << proc->pid_bro_pre << endl
-        << "proc pid_bro_next : " << proc->pid_bro_next << endl
-        << "proc pid_fir_child : " << proc->pid_fir_child << endl
+        << "proc pid_fa : " << proc->fa << endl
+        << "proc pid_bro_pre : " << proc->bro_pre << endl
+        << "proc pid_bro_next : " << proc->bro_next << endl
+        << "proc pid_fir_child : " << proc->fir_child << endl
         << "proc vms addr : " << Hex((uint64)proc->vms) << endl
         << "proc vms : " << endl;
     proc->vms->show();
@@ -143,13 +144,17 @@ proc_struct* ProcessManager::alloc_proc()
     proc->ku_flag = 0;              // 表示未初始化 既不是内核又不是用户
     proc->kstack = nullptr;
     proc->kstacksize = 0;
+    proc->trap_sys_timebase = 0;
+    proc->waittime_limit = 0;       // 这个只有在相关场景下会手动设置 无需初始化
     proc->context = nullptr;
     proc->vms = nullptr;
-    proc->pid_fa = nullptr;
-    proc->pid_bro_pre = nullptr;
-    proc->pid_bro_next = nullptr;
-    proc->pid_fir_child = nullptr;
+    proc->fa = nullptr;
+    proc->bro_pre = nullptr;
+    proc->bro_next = nullptr;
+    proc->fir_child = nullptr;
     proc->exit_value = 0;           // 只有在异常退出时才需要设置 大部分情况下均为0
+    proc->flags = 0;                // 系统调用时需要 其他场景暂时不会使用
+    proc->sem = nullptr;
     memset(&(proc->context), 0, sizeof proc->context);
     memset(proc->name, 0, PROC_NAME_LEN);
 
@@ -157,7 +162,7 @@ proc_struct* ProcessManager::alloc_proc()
     return proc;
 }
 
-bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
+bool ProcessManager::init_proc(proc_struct* proc, int ku_flag, int flags)
 {
 
     if (proc == nullptr)
@@ -198,16 +203,20 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
     {
         add_proc_tolist(proc);
         proc->stat = Proc_ready;
-        proc->kstack = nullptr;     //这个在分配过程已经完成
+        proc->kstack = nullptr;     // 这个在分配过程已经完成
         proc->kstacksize = 0;
         proc->context = nullptr;
         proc->ku_flag = ku_flag;
         proc->pid = tm_pid;
         proc->timebase = get_clock_time();
         proc->runtime = 0;
+        proc->systime = 0;          // 对于内核进程可以认为不需要使用这个成员变量     
         proc->sleeptime = 0;
         proc->readytime = 0;
         proc->vms = nullptr;
+        proc->flags = flags;
+        proc->sem = (SEMAPHORE*)kmalloc(sizeof(SEMAPHORE));
+        proc->sem->init();          // 初始化每个进程的信号量值设为0 wait系统调用的需要
         // ... 其他待定
     }
     else
@@ -220,10 +229,14 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag)
         proc->ku_flag = ku_flag;
         proc->pid = tm_pid;
         proc->timebase = get_clock_time();
+        proc->systime = 0;          // 虽然此时也在核心态 但是我们只考虑运行时间
         proc->runtime = 0;
         proc->sleeptime = 0;
         proc->readytime = 0;
         proc->vms = nullptr;
+        proc->flags = flags;
+        proc->sem = (SEMAPHORE*)kmalloc(sizeof(SEMAPHORE));
+        proc->sem->init();
         // ... 其他待定
     }
     return true;
@@ -269,6 +282,7 @@ bool ProcessManager::free_proc(proc_struct* proc)
     // 当然目前主要有
     // 内核栈空间需要检查
     // 虚存管理分配空间需要检查
+    // 信号量资源
     int check_ret = 0;
     if (proc->kstack != nullptr || proc->kstacksize > 0)
     {
@@ -284,6 +298,14 @@ bool ProcessManager::free_proc(proc_struct* proc)
     if (proc->vms != nullptr)
     {
         // 当然如果前面某个if就调用了这个函数 那么应该所有需要被检查释放的资源都已经释放
+        check_ret = finish_proc(proc);
+        if (check_ret != 0)
+        {
+            return false;
+        }
+    }
+    if (proc->sem != nullptr)
+    {
         check_ret = finish_proc(proc);
         if (check_ret != 0)
         {
@@ -317,12 +339,14 @@ int ProcessManager::finish_proc(proc_struct* proc)
     // 目前主要有
     // 内核栈需要检查
     // 虚存管理需要检查
+    // 信号量以及其上的进程队列需要检查
     if (proc->kstacksize > 0 || proc->kstack != nullptr)
     {
         kfree(proc->kstack);
         proc->kstack = nullptr;
         proc->kstacksize = 0;
     }
+
     if (proc->vms != nullptr)
     {
         if (proc->vms->GetShareCount() > 1)
@@ -343,6 +367,24 @@ int ProcessManager::finish_proc(proc_struct* proc)
             proc->vms = nullptr;
         }
     }
+
+    if (proc->sem != nullptr)
+    {
+        // 对于每一个进程在创建并初始化它时信号量就被分配空间并且被初始化了
+        // 因此这里是一定会执行到并且需要释放
+        // 先释放信号量上的进程队列的空间
+        if (proc->sem->destroy())
+        {
+            // 只有队列空间被成功释放才可以
+            kfree(proc->sem);
+        }
+        else
+        {
+            kout[red] << "The Semaphore's queue is not Empty So the sem pointer cannot be freed!" << endl;
+            return -1;
+        }
+    }
+
     // ... 文件 IPC等其他部分
 
     return 0;
@@ -392,10 +434,106 @@ bool ProcessManager::set_proc_kstk(proc_struct* proc, void* kaddr, uint32 size)
             return false;
         }
     }
-    
+
     proc->kstack = kaddr;
     proc->kstacksize = size;
     return true;
+}
+
+void ProcessManager::user_proc_help_init(proc_struct* dst, proc_struct* src)
+{
+    // 将某个进程控制块的相关信息的迁移和相关初始化工作
+    // 这里实现的基础就是旧进程的信息迁移完成后会被回收这个特性
+    // 主要是为了实现从特定函数启动用户进程实现
+    // 关键就是对于相关信息的重新分配内存并复制信息
+
+    // 手动初始化
+    // 由于是为了看起来就是一个进程的切换
+    // 这里的初始化工作也是手动完成
+    // 主要只需要把ku标志和pid手动更改
+    add_proc_tolist(dst);
+    dst->stat = Proc_ready;
+    dst->context = nullptr;
+    dst->ku_flag = src->ku_flag;
+    dst->pid = src->pid;                // 拷贝辅助进程的pid 从而看起来就像是原来的进程实现了从特定函数的启动并且进入用户态执行用户程序部分的代码
+    dst->exit_value = src->exit_value;
+    dst->flags = src->flags;
+    dst->sem = src->sem;
+    src->sem = nullptr;                 // 手动初始化做迁移 将原进程的分配的sem指针给新进程并置空 防止回收时报错
+
+    // 时间信息的拷贝
+    dst->timebase = src->timebase;
+    dst->runtime = src->runtime;
+    dst->systime = src->systime;
+    dst->waittime_limit = src->waittime_limit;
+
+    // 内核栈的初始化
+    // 每个进程都需要分配一块内核栈区域
+    pm.set_proc_kstk(dst, nullptr, KERNELSTACKSIZE * 4);
+
+    // 链接信息的拷贝
+    if (src->fa != nullptr)
+    {
+        dst->fa = src->fa;
+    }
+    if (src->bro_pre != nullptr)
+    {
+        dst->bro_pre = src->bro_pre;
+    }
+    if (src->bro_next != nullptr)
+    {
+        dst->bro_next = src->bro_next;
+    }
+    if (src->fir_child != nullptr)
+    {
+        dst->fir_child = src->fir_child;
+    }
+
+    // vms的拷贝
+    // 这里的拷贝就是新旧迁移 为了从特定函数启动的用户进程设置的
+    // 而不是利用旧进程的信息创建一个新进程 两者各自的vms独立
+    // 故可以利用引用并指向同一个vms地址
+    pm.set_proc_vms(dst, src->vms);
+
+    // 由于是新旧迁移
+    // 名字也是一样的
+    if (!strcmp(src->name, (char*)""))
+    {
+        pm.set_proc_name(dst, src->name);
+    }
+
+    // ... 文件系统相关
+}
+
+void ProcessManager::copy_other_proc(proc_struct* dst, proc_struct* src)
+{
+    // 这里的copy部分与上面的迁移区别就在于是否初始化
+    // 计时时间部分
+    dst->timebase = src->timebase;
+    dst->runtime = src->runtime;
+    dst->systime = src->systime;
+    dst->waittime_limit = src->waittime_limit;
+    dst->readytime = src->readytime;                // 保留但暂未使用
+    dst->sleeptime = src->sleeptime;                // 保留但暂未使用
+
+    // 链接部分
+    // 这里是两个现实存在的进程间的拷贝
+    // 只需要考虑父进程间的copy
+    if (src->fa != nullptr)
+    {
+        dst->fa = src->fa;
+    }
+
+    // 标志位信息 
+    dst->flags = src->flags;
+
+    // 进程的名字
+    if (!strcmp(src->name, (char*)""))
+    {
+        pm.set_proc_name(dst, src->name);
+    }
+
+    // ... 文件系统相关
 }
 
 bool ProcessManager::set_proc_vms(proc_struct* proc, VMS* vms)
@@ -426,6 +564,54 @@ bool ProcessManager::set_proc_vms(proc_struct* proc, VMS* vms)
     return true;
 }
 
+void ProcessManager::set_fa_proc(proc_struct* proc, proc_struct* fa_proc)
+{
+    if (proc == nullptr || fa_proc == nullptr)
+    {
+        kout[red] << "The Process or Father Process has not existed!" << endl;
+        return;
+    }
+
+    if (proc->fa != nullptr)
+    {
+        // 当需要设置的进程已经有一个非空的父进程了
+        // 需要做好关系的转移和清理工作
+        if (proc->fa == fa_proc)
+        {
+            // 父子进程和参数中的已经一致
+            return;
+        }
+        // 关键就是做好关系的转移
+        if (proc->fa->fir_child == proc)
+        {
+            proc->fa->fir_child = proc->bro_next;
+        }
+        else if (proc->bro_pre != nullptr)
+        {
+            proc->bro_pre->next = proc->bro_next;
+        }
+        // 再判断一下bro_next进程
+        if (proc->bro_next != nullptr)
+        {
+            proc->bro_next->bro_pre = proc->bro_pre;
+        }
+        // 关系转移好了之后清理一下"族谱"关系
+        // 一个进程不应该同时具有多个父进程
+        proc->bro_pre = nullptr;
+        proc->bro_next = nullptr;
+        proc->fa = nullptr;
+    }
+
+    // 设置新的父进程
+    proc->fa = fa_proc;
+    proc->bro_next = proc->fa->fir_child;           // 关系的接替 "顶"上去 类头插
+    proc->fa->fir_child = proc;
+    if (proc->bro_next != nullptr)
+    {
+        proc->bro_next->bro_pre = proc;
+    }
+}
+
 void ProcessManager::init_idleproc_for_boot()
 {
     // 初始化0号boot进程 也可以认为是根进程
@@ -443,12 +629,16 @@ void ProcessManager::init_idleproc_for_boot()
     idle_proc->ku_flag = 1;                         // 内核级进程
     idle_proc->stat = Proc_ready;                   // 初始化状态为就绪态
     idle_proc->pid = 0;                             // 默认分配0号pid 特质idle进程
-    idle_proc->pid_fa = nullptr;                    // 根进程 永远不会存在父进程
+    idle_proc->fa = nullptr;                        // 根进程 永远不会存在父进程
     idle_proc->kstack = boot_stack;                 // 第0个进程 内核栈地址直接放在boot_stack位置
     idle_proc->kstacksize = boot_stack_top - boot_stack;
-    set_proc_name(idle_proc, (char*)"DBStars_Operating_System");
+    idle_proc->timebase = get_clock_time();
+    idle_proc->flags = 0;
+    set_proc_name(idle_proc, (char*)"DBStars_OperatingSystem");
     add_proc_tolist(idle_proc);                     // 别忘了加入进程链表 永驻第1个节点位置
     set_proc_vms(idle_proc, VMS::GetKernelVMS());   // 0号boot进程的vms地址空间的设置
+    idle_proc->sem = (SEMAPHORE*)kmalloc(sizeof(SEMAPHORE));
+    idle_proc->sem->init();                         // 信号量的初始化
     pm.switchstat_proc(idle_proc, Proc_running);    // 初始化完了就让这个进程一直跑起来吧
 }
 
@@ -459,7 +649,7 @@ void ProcessManager::Init()
     cur_proc = nullptr;
     need_imme_run_proc = nullptr;
     need_rest = false;
-    
+
     // PM类的初始化主要就是初始化出 idle 0号进程
     init_idleproc_for_boot();
     cur_proc = idle_proc;                           // 别忘了设置cur_proc
@@ -478,6 +668,7 @@ bool ProcessManager::switchstat_proc(proc_struct* proc, uint32 tar_stat)
         return false;
     }
 
+    // 每次切换状态时更新相关的时间
     clock_t curtime = get_clock_time();
     clock_t duration = curtime - proc->timebase;
     proc->timebase = curtime;
@@ -513,6 +704,13 @@ bool ProcessManager::switchstat_proc(proc_struct* proc, uint32 tar_stat)
         }
         proc->sleeptime += duration;
         proc->stat = tar_stat;
+        if (tar_stat != Proc_sleeping)
+        {
+            // 自唤醒设计的灵活封装与自动化
+            // 当从sleeping态唤醒时
+            // sleeptime的计时即可置零了
+            proc->sleeptime = 0;
+        }
         break;
     case Proc_finished:
         break;
@@ -520,6 +718,102 @@ bool ProcessManager::switchstat_proc(proc_struct* proc, uint32 tar_stat)
         break;
     }
     return true;
+}
+
+clock_t ProcessManager::get_proc_rumtime(proc_struct* proc, bool need_update)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return 0;
+    }
+
+    if (need_update)
+    {
+        // 说明需要更新
+        // 从run态切换回run态即可
+        // 利用状态切换封装的函数实现
+        if (proc->stat == Proc_running)
+        {
+            pm.switchstat_proc(proc, Proc_running);
+        }
+    }
+    return proc->runtime;
+}
+
+clock_t ProcessManager::get_proc_systime(proc_struct* proc, bool need_update)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return 0;
+    }
+
+    if (need_update)
+    {
+        // 说明需要更新
+        // 利用陷入系统调用的计时起点即可
+        // 一般不会这样使用
+        clock_t cur_time = get_clock_time();
+        if (cur_time >= proc->trap_sys_timebase)
+        {
+            proc->systime += cur_time - proc->trap_sys_timebase;
+        }
+    }
+    return proc->systime;
+}
+
+void ProcessManager::set_systiembase(proc_struct* proc)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+
+    // 这个函数只会在进程陷入系统调用时执行
+    // 默认参数为当前进程
+    proc->trap_sys_timebase = get_clock_time();
+}
+
+void ProcessManager::calc_systime(proc_struct* proc, bool is_wait)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+
+    if (is_wait)
+    {
+        // 如果是wait系统调用
+        // systime的核算已经被单独处理了
+        // 这里不需要再进行计算
+        return;
+    }
+    clock_t cur_time = get_clock_time();
+    if (cur_time >= proc->trap_sys_timebase)
+    {
+        if (proc->pid == 1)
+        {
+            // kout[red] << cur_time << endl;
+            // kout[blue] << proc->trap_sys_timebase << endl;
+            // kout[red] << cur_time - proc->trap_sys_timebase << endl;
+        }
+        proc->systime += cur_time - proc->trap_sys_timebase;
+    }
+    proc->trap_sys_timebase = 0;
+}
+
+void ProcessManager::set_waittime_limit(proc_struct* proc, clock_t waittime_limit)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+
+    proc->waittime_limit = waittime_limit;
 }
 
 bool ProcessManager::start_kernel_proc(proc_struct* proc, int (*func)(void*), void* arg)
@@ -566,12 +860,12 @@ bool ProcessManager::start_kernel_proc(proc_struct* proc, int (*func)(void*), vo
     // 因为需要恢复的原先保存的那一段上下文TRAMFRAME结构已经在代码中放到所属进程结构体的对应成员中去了
 }
 
-bool ProcessManager::start_user_proc(proc_struct* proc, int (*func)(void*), void* arg)
+bool ProcessManager::start_user_proc(proc_struct* proc, int (*func)(void*), void* arg, uint64 user_start_addr)
 {
-    // 这个函数的存在更多是为了接口统一
-    // 实际上用户进程的真正含义并不会在内核使用在内核创建用户函数这一接口创建用户进程
-    // 汇编代码也作了处理 这种接口和start内核线程无异 为区分在特权级上做了处理
-    // 这个函数的参数是不正确的 是不符合用户进程的
+    // 这个函数是为了辅助实现在解析ELF文件装载进程的过程中
+    // 装载用户进程时需要让用户进程通过某个特定的函数去启动而实现的
+    // 这里采取的实现方式为先是让这个用户进程像内核进程一样执行这个装载函数
+    // 当这个函数装载完成之后再像用户进程一样返回到用户态进行执行
     if (proc == nullptr)
     {
         kout[red] << "The Process has not existed!" << endl;
@@ -585,18 +879,44 @@ bool ProcessManager::start_user_proc(proc_struct* proc, int (*func)(void*), void
     }
 
     proc->context = (TRAPFRAME*)((char*)proc->kstack + proc->kstacksize) - 1;
-    // 注意用户进程的权限设置
-    uint64 SPIE = 1 << 5;                               // 100000
-    uint64 SIE = 1 << 1;                                // 10
-    uint64 SPP = 1 << 8;                                // 100000000
-    proc->context->status = (read_csr(sstatus) | SPIE) & (~SPP) & (~SIE);   // 特权级设置为U态
+    uint64 SPP = 1 << 8;
+    uint64 SPIE = 1 << 5;
+    uint64 SIE = 1 << 1;
+    proc->context->status = (read_csr(sstatus) | SPP | SPIE) & (~SIE);
     proc->context->epc = (uint64)UserProcessEntry;
     proc->context->reg.s0 = (uint64)func;
     proc->context->reg.s1 = (uint64)arg;
-    proc->context->reg.s2 = (uint64)proc;               // 内核给用户创建函数 也只能由内核来回收 这是不符合用户进程接口的
+    proc->context->reg.s2 = (uint64)proc;
+    proc->context->reg.s3 = (uint64)user_start_addr;        // 将需要转换并跳转的用户地址也保存下来去传参
     proc->context->reg.sp = (uint64)((char*)proc->kstack + proc->kstacksize);
     pm.switchstat_proc(proc, Proc_ready);
     return true;
+}
+
+void ProcessManager::switch_kernel_to_user(proc_struct* proc, uint64 user_start_addr)
+{
+    // 理论上执行到这个函数不会出现这些需要判断的特殊情况
+    // 出于代码的统一和严谨性
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+
+    if (proc->kstack == nullptr && proc->kstacksize == 0)
+    {
+        kout[red] << "The Kernel Process doesn't have KernelStack!" << endl;
+        return;
+    }
+
+    // 实现从特定函数启动的用户进程事实上是预创建一个辅助内核进程
+    // 它暂时代替执行需要执行的启动函数
+    // 为了不改变调度器的逻辑 再创建一个新的用户进程去接替它的信息和使命
+    // 事实上这里还是执行一次进程调度
+    // 为了统一性我们区分开来并且使用ebreak去实现调度
+    proc_struct* u_proc = pm.alloc_proc();
+    pm.user_proc_help_init(u_proc, proc);
+    start_user_proc(u_proc, user_start_addr);           // 使用用户进程启动的通用接口即可
 }
 
 bool ProcessManager::start_user_proc(proc_struct* proc, uint64 user_start_addr)
@@ -645,6 +965,22 @@ extern "C"
     }
 }
 
+// 从内核进程执行完特定的启动函数后进入用户进程
+extern "C"
+{
+    void KerneltoUserProcess(proc_struct* proc, uint64 user_start_addr)
+    {
+        // 此时的进程还是在S态
+        // 这个进程结构体已经被装载完毕
+        // 或者说需要执行的启动函数已经执行完毕
+        // 执行恢复用户进程的相关流程和跳转即可
+        pm.switch_kernel_to_user(proc, user_start_addr);
+        pm.switchstat_proc(proc, Proc_finished);
+        asm volatile("li a7,2; ebreak");                // a7设置为2进行区分
+        kout[yellow] << "This Block should not occur!" << endl;
+    }
+}
+
 // 进程调度非常非常关键的调度器函数 本内核设计模式下所有的调度工作都将在这里实现
 // 具有极强的灵活性和可扩展性
 // 并且极好地实现了封装和隔离的高效的代码管理
@@ -652,6 +988,8 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
 {
     // 进程调度器的核心功能 利用trap进行进程调度
     // 调度器每次轮询时遇到需要回收的进程都会进行相应的回收
+
+    // show_reg(context);
 
     if (cur_proc == nullptr)
     {
@@ -713,6 +1051,41 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
             }
             else
             {
+                if (sptr->stat == Proc_sleeping)
+                {
+                    // 更新进程的sleeping时间
+                    // 主要是为了进程自唤醒的设计
+                    // 父子进程的wait可以通过父子进程的sem协调
+                    // 但对于像sleep这样的系统调用需要能够自唤醒
+                    // 对于自唤醒的设计需要考虑到使用两个信号量时
+                    // 如果用于父子进程通信的信号量仍然阻塞
+                    // 这里还是无法自唤醒的
+                    pm.switchstat_proc(sptr, Proc_sleeping);
+                    int w_value = sptr->sem->get_val();
+                    if (w_value < 0)
+                    {
+                        // 说明当前进程由于父子进程间的关系
+                        // 仍然阻塞在信号量上
+                        // 还是无法继续进行自唤醒
+                        kout[yellow] << "The process needs to wait its CHILD process!" << endl;
+                        sptr = sptr->next;
+                        continue;
+                    }
+                    if (sptr->sleeptime >= sptr->waittime_limit)
+                    {
+                        // 可以自唤醒了
+                        // 并且可以进行调度了
+                        pm.switchstat_proc(sptr, Proc_ready);
+                        if (cur_proc->stat == Proc_running)
+                        {
+                            pm.switchstat_proc(cur_proc, Proc_ready);
+                        }
+                        cur_proc = sptr;
+                        pm.switchstat_proc(cur_proc, Proc_running);
+                        cur_proc->vms->Enter();
+                        return cur_proc->context;
+                    }
+                }
                 sptr = sptr->next;
             }
         }
@@ -743,6 +1116,38 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
             }
             else
             {
+                if (sptr->stat == Proc_sleeping)
+                {
+                    // 更新进程的sleeping时间
+                    // 主要是为了进程自唤醒的设计
+                    // 父子进程的wait可以通过父子进程的sem协调
+                    // 但对于像sleep这样的系统调用需要能够自唤醒
+                    pm.switchstat_proc(sptr, Proc_sleeping);
+                    int w_value = sptr->sem->get_val();
+                    if (w_value < 0)
+                    {
+                        // 说明当前进程由于父子进程间的关系
+                        // 仍然阻塞在信号量上
+                        // 还是无法继续进行自唤醒
+                        kout[yellow] << "The process needs to wait its CHILD process!" << endl;
+                        sptr = sptr->next;
+                        continue;
+                    }
+                    if (sptr->sleeptime >= sptr->waittime_limit)
+                    {
+                        // 可以自唤醒了
+                        // 并且可以进行调度了
+                        pm.switchstat_proc(sptr, Proc_ready);
+                        if (cur_proc->stat == Proc_running)
+                        {
+                            pm.switchstat_proc(cur_proc, Proc_ready);
+                        }
+                        cur_proc = sptr;
+                        pm.switchstat_proc(cur_proc, Proc_running);
+                        cur_proc->vms->Enter();
+                        return cur_proc->context;
+                    }
+                }
                 sptr = sptr->next;
             }
         }
@@ -862,6 +1267,12 @@ void ProcessManager::exit_proc(proc_struct* proc, int ec)
     }
     proc->exit_value = ec;
     proc->vms->Leave();
+    // 如果当前进程有父进程
+    // 那么出于wait的逻辑 当子进程被回收了应该可以让父进程signal
+    if (proc->fa != nullptr)
+    {
+        proc->fa->sem->signal();
+    }
     // 这里可以触发立即调度进行回收 也可以在时钟中断RR调度下轮询回收
     // 立即回收理论上只有当调用函数的进程为当前执行的进程时会有明显效果
     pm.imme_trigger_schedule();
@@ -881,18 +1292,18 @@ proc_struct* CreateKernelProcess(int (*func)(void*), void* arg, char* name)
 proc_struct* CreateUserImgProcess(uint64 img_start, uint64 img_end, char* name)
 {
     // 创建用户进程
-    // 需要利用到虚存的相关进制
+    // 需要利用到虚存的相关机制
     VMS* vms = (VMS*)kmalloc(sizeof(VMS));
     vms->init();
     uint64 img_load_size = img_end - img_start;
     uint64 img_load_start = EmbedUserProcessEntryAddr;
     uint64 img_load_end = img_load_start + img_load_size;
-    int user_bin_flag = 0b111;                                              // 用户映像的权限 可读可写可执行
+    int user_bin_flag = VM_rwx;                                             // 用户映像的权限 可读可写可执行
     vms->insert(img_load_start, img_load_end, user_bin_flag);               // 创建用户映像空间在虚存中
     uint64 img_user_stack_size = EmbedUserProcessStackSize;
     uint64 img_user_stack_start = EmbedUserProcessStackAddr;
     uint64 img_user_stack_end = img_user_stack_start + img_user_stack_size;
-    int user_stack_flag = 0b1000001011;                                     // 用户栈权限 可读可写栈动态
+    int user_stack_flag = VM_userstack;                                     // 用户栈权限 可读可写栈动态
     vms->insert(img_user_stack_start, img_user_stack_end, user_stack_flag); // 分配用户栈空间
 
     // 创建完用户的vms后就是创建进程的流程了
@@ -909,6 +1320,37 @@ proc_struct* CreateUserImgProcess(uint64 img_start, uint64 img_end, char* name)
     memcpy((void*)img_load_start, (char*)img_start, img_load_size);         // 将嵌入内核的用户映像地址拷贝到用户空间执行地址处
     u_proc->vms->DisableAccessUser();                                       // 上面执行完了 这里就反过来
     u_proc->vms->Leave();                                                   // 离开vms
+
+    return u_proc;
+}
+
+proc_struct* CreateUserImafromFunc(int (*func)(void*), void* arg, uint64 img_start, uint64 img_end, char* name)
+{
+    VMS* vms = (VMS*)kmalloc(sizeof(VMS));
+    vms->init();
+    uint64 img_load_size = img_end - img_start;
+    uint64 img_load_start = EmbedUserProcessEntryAddr;
+    uint64 img_load_end = img_load_start + img_load_size;
+    int user_bin_flag = VM_rwx;
+    vms->insert(img_load_start, img_load_end, user_bin_flag);
+    uint64 img_user_stack_size = EmbedUserProcessStackSize;
+    uint64 img_user_stack_start = EmbedUserProcessStackAddr;
+    uint64 img_user_stack_end = img_user_stack_start + img_user_stack_size;
+    int user_stack_flag = VM_userstack;
+    vms->insert(img_user_stack_start, img_user_stack_end, user_stack_flag);
+
+    proc_struct* u_proc = pm.alloc_proc();
+    pm.init_proc(u_proc, 2);
+    pm.set_proc_name(u_proc, name);
+    pm.set_proc_kstk(u_proc, nullptr, KERNELSTACKSIZE * 4);
+    pm.set_proc_vms(u_proc, vms);
+    pm.start_user_proc(u_proc, func, arg, EmbedUserProcessEntryAddr);
+
+    u_proc->vms->Enter();
+    u_proc->vms->EnableAccessUser();
+    memcpy((void*)img_load_start, (char*)img_start, img_load_size);
+    u_proc->vms->DisableAccessUser();
+    u_proc->vms->Leave();
 
     return u_proc;
 }
