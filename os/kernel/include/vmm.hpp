@@ -157,10 +157,11 @@ enum VMR_flags
 class VMR
 {
     friend class VMS;
-private:
+protected:
     VMR_FLAG flag;
     uint64 start, end;                                  // 存储的是物理地址
-    VMR* pre, * next;
+    VMR* pre;
+    VMR* next;
 
 public:
     inline uint64 GetLength()
@@ -274,11 +275,79 @@ public:
 
 bool trap_PageFault(TRAPFRAME* tf);
 
-using size_t =long unsigned int;
+using size_t = long unsigned int;
 
-void * operator new(size_t size);
-void * operator new[](size_t size);
-void  operator delete(void * p,uint64 size);
-void  operator delete[](void * p);
+void* operator new(size_t size);
+void* operator new[](size_t size);
+void  operator delete(void* p, uint64 size);
+void  operator delete[](void* p);
+
+// HMR 即 HeapMemoryRegion
+// 主要是为了实现用户进程的堆段区 即数据段
+// 进而实现brk这样需要修改数据段的系统调用
+// 本质也是一个VMR结构 使用继承VMR的方式即可
+class HMR :public VMR
+{
+protected:
+    uint64 breakpoint_length = 0;                       // 断点长度
+
+public:
+    inline uint64 breakpoint()
+    {
+        // 返回断点的地址
+        return start + breakpoint_length;               // start即VMR的起始地址
+    }
+
+    inline bool resize(int64 delta)
+    {
+        // 重新调整数据段的大小
+        // delta参数表示的是增量
+        if (delta >= 0)
+        {
+            // 增加
+            breakpoint_length += delta;
+            if (start + breakpoint_length > end)
+            {
+                // 修改后的数据段超出一个VMR
+                // 需要调整
+                if (next == nullptr || start + breakpoint_length <= next->GetStart())
+                {
+                    end = start + breakpoint_length + PAGESIZE - 1 >> 12 << 12;     // 2^12=4096(PAGESIZE) 对齐处理
+                }
+                else
+                {
+                    // 超出VMR空间大小的限制
+                    // 增加失败
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            // 减少
+            if (breakpoint_length + delta < 0)
+            {
+                // 直接置零
+                breakpoint_length = 0;
+                end = start + PAGESIZE;
+            }
+            else
+            {
+                breakpoint_length += delta;
+                end = start + breakpoint_length + PAGESIZE - 1 >> 12 << 12;         // 更新end并对齐
+            }
+        }
+        return true;
+    }
+
+    inline bool Init(uint64 start, uint64 length = PAGESIZE, uint32 flags = VM_userheap)
+    {
+        // 初始化用户进程的数据段
+        // 参数length的默认参数设置为页大小
+        // 参数flags权限标志位设置为userheap
+        breakpoint_length = length;
+        return VMR::Init(start, start + length, flags);
+    }
+};
 
 #endif

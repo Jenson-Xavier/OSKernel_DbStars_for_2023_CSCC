@@ -104,7 +104,7 @@ bool VMR::Init(uint64 _start, uint64 _end, uint32 _flags)
 
 bool VMS::init()
 {
-    // Head = nullptr;
+    Head = nullptr;
     VMRCount = 0;
 
     PDT = (PAGETABLE*)pmm.malloc(4096);
@@ -339,12 +339,18 @@ bool VMS::SolvePageFault(TRAPFRAME* tf)
     p = e1.get_next_page();
 
     ENTRY& e0 = p->getEntry((tf->badvaddr >> 12) & 511);
+    // kout.memory(&e0, 8);
+    // kout[yellow] << (uint64)p << endl;
     if (!e0.V)
     {
         p = (PAGETABLE*)pmm.malloc(4096);
         e0.set_PNN(p->PAddr());
         e0.V = 1;
         e0.W = t->flag.Write;
+        // if (t->flag.Write)
+        // {
+        //     kout[red] << "true" << endl;
+        // }
         e0.R = t->flag.Read;
         e0.X = t->flag.Exec;
         e0.U = 1;           // 用户页面需要增加用户标志位

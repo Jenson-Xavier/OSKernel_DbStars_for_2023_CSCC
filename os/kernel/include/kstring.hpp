@@ -86,6 +86,8 @@ char* strcpy_no_end(char* dst, const char* src);
 
 int strcmp(const char* s1, const char* s2);
 
+void strcat(char* dst, const char* src);
+
 void* memset(void* s, char ch, uint64 size);
 
 void* memcpy(void* dst, const char* src, uint64 size);

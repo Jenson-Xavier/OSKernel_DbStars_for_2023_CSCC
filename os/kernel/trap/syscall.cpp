@@ -7,6 +7,9 @@
 #include <clock.hpp>
 #include <interrupt.hpp>
 #include <synchronize.hpp>
+#include <FAT32.hpp>
+#include <fileobject.hpp>
+#include <parseELF.hpp>
 
 // 实现系统调用函数
 // 主要根据大赛要求依次进行实现
@@ -36,20 +39,295 @@ inline void SYS_exit(int ec)
     kout[red] << "SYS_exit : reached unreachable branch!" << endl;
 }
 
+inline char* SYS_getcwd(char* buf, uint64 size)
+{
+    // 获取当前工作目录的系统调用
+    // 传入一块字符指针缓冲区和大小
+    // 成功返回当前工作目录的字符指针 失败返回nullptr
 
+    if (buf == nullptr)
+    {
+        // buf为空时由系统分配缓冲区
+        buf = (char*)kmalloc(size * sizeof(char));
+    }
+    else
+    {
+        proc_struct* cur_proc = pm.get_cur_proc();
+        VMS::EnableAccessUser();
+        const char* cwd = cur_proc->cur_work_dir;
+        uint64 cwd_len = strlen(cwd);
+        if (cwd_len > 0 && cwd_len < size)
+        {
+            strcpy(buf, cwd);
+        }
+        else
+        {
+            kout[yellow] << "SYS_getcwd the Buf Size is Not enough to Store the cwd!" << endl;
+            return nullptr;
+        }
+        VMS::DisableAccessUser();
+    }
+    return buf;
+}
 
+inline int SYS_pipe2();
 
+inline int SYS_dup(int fd)
+{
+    // 复制文件描述符的系统调用
+    // 传入被复制的文件描述符
+    // 成功返回新的文件描述符 失败返回-1
 
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo = fom.get_from_fd(cur_proc->fo_head, fd);
+    if (fo == nullptr)
+    {
+        // 当前文件描述符不存在
+        return -1;
+    }
+    file_object* fo_new = fom.duplicate_fo(fo);
+    if (fo_new == nullptr)
+    {
+        return -1;
+    }
+    int ret_fd = -1;
+    // 将复制的新的文件描述符直接插入当前的进程的文件描述符表
+    ret_fd = fom.add_fo_tolist(cur_proc->fo_head, fo_new);
+    return ret_fd;
+}
 
+inline int SYS_dup3(int old_fd, int new_fd)
+{
+    // 复制文件描述符同时指定新的文件描述符的系统调用
+    // 成功执行返回新的文件描述符 失败返回-1
 
+    if (old_fd == new_fd)
+    {
+        return new_fd;
+    }
 
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo_old = fom.get_from_fd(cur_proc->fo_head, old_fd);
+    if (fo_old == nullptr)
+    {
+        return -1;
+    }
+    file_object* fo_new = fom.duplicate_fo(fo_old);
+    if (fo_new == nullptr)
+    {
+        return -1;
+    }
+    // 先查看指定的新的文件描述符是否已经存在
+    file_object* fo_tmp = nullptr;
+    fo_tmp = fom.get_from_fd(cur_proc->fo_head, new_fd);
+    if (fo_tmp != nullptr)
+    {
+        // 指定的新的文件描述符已经存在
+        // 将这个从文件描述符表中删除
+        fom.delete_flobj(cur_proc->fo_head, fo_tmp);
+    }
+    fom.set_fo_fd(fo_new, new_fd);
+    // 再将这个新的fo插入进程的文件描述符表
+    int rd = fom.add_fo_tolist(cur_proc->fo_head, fo_new);
+    if (rd != new_fd)
+    {
+        return -1;
+    }
+    return rd;
+}
 
+inline int SYS_chdir(const char* path)
+{
+    // 切换工作目录的系统调用
+    // 传入要切换的工作目录的参数
+    // 成功返回0 失败返回-1
 
+    if (path == nullptr)
+    {
+        return -1;
+    }
 
+    proc_struct* cur_proc = pm.get_cur_proc();
+    VMS::EnableAccessUser();
+    pm.set_proc_cwd(cur_proc, path);
+    VMS::DisableAccessUser();
+    return 0;
+}
 
+inline int SYS_openat();
 
+inline int SYS_close(int fd)
+{
+    // 关闭一个文件描述符的系统调用
+    // 传入参数为要关闭的文件描述符
+    // 成功执行返回0 失败返回-1
 
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo = fom.get_from_fd(cur_proc->fo_head, fd);
+    if (fo == nullptr)
+    {
+        return -1;
+    }
+    if (!fom.close_fo(cur_proc, fo))
+    {
+        // fom中的close_fo调用会关闭这个文件描述符
+        // 主要是对相关文件的解引用并且从文件描述符表中删去这个节点
+        return -1;
+    }
+    return 0;
+}
 
+struct dirent
+{
+    uint64 d_ino;	                    // 索引结点号
+    int64 d_off;	                    // 到下一个dirent的偏移
+    unsigned short d_reclen;	        // 当前dirent的长度
+    unsigned char d_type;	            // 文件类型
+    char d_name[];	                    // 文件名
+}__attribute__((packed));
+
+inline int SYS_getdents64();
+
+inline int64 SYS_read(int fd, void* buf, uint64 count)
+{
+    // 从一个文件描述符中读取的系统调用
+    // fd是要读取的文件描述符
+    // buf是存放读取内容的缓冲区 count是要读取的字节数
+    // 成功返回读取的字节数 0表示文件结束 失败返回-1
+
+    if (buf == nullptr)
+    {
+        return -1;
+    }
+
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo = fom.get_from_fd(cur_proc->fo_head, fd);
+    if (fo == nullptr)
+    {
+        return -1;
+    }
+    VMS::EnableAccessUser();
+    int64 rd_size = 0;
+    rd_size = fom.read_fo(fo, buf, count);
+    VMS::DisableAccessUser();
+    if (rd_size < 0)
+    {
+        return -1;
+    }
+    return rd_size;
+}
+
+inline int64 SYS_write(int fd, void* buf, uint64 count)
+{
+    // 从一个文件描述符写入
+    // 输入fd为一个文件描述符
+    // buf为要写入的内容缓冲区 count为写入内容的大小字节数
+    // 成功返回写入的字节数 失败返回-1
+
+    if (buf == nullptr)
+    {
+        return -1;
+    }
+
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo = fom.get_from_fd(cur_proc->fo_head, fd);
+    if (fo == nullptr)
+    {
+        return -1;
+    }
+    VMS::EnableAccessUser();
+    int64 wr_size = 0;
+    wr_size = fom.write_fo(fo, buf, count);
+    VMS::DisableAccessUser();
+    if (wr_size < 0)
+    {
+        return -1;
+    }
+    return wr_size;
+}
+
+inline int SYS_linkat();
+
+inline int SYS_unlinkat();
+
+inline int SYS_mkdirat();
+
+inline int SYS_umount2(const char* special, int flags)
+{
+    // 卸载文件系统的系统调用
+    // 输入为指定的卸载目录和卸载参数
+    // 成功返回0 失败返回-1
+
+    return 0;
+}
+
+inline int SYS_mount(const char* special, const char* dir, const char* fstype, uint64 flags, const void* data)
+{
+    // 挂载文件系统的系统调用
+    // special为挂载设备
+    // dir为挂载点
+    // fstype为挂载的文件系统类型
+    // flags为挂载参数
+    // data为传递给文件系统的字符串参数 可为NULL
+    // 成功返回0 失败返回-1
+
+    return 0;
+}
+
+struct kstat {
+    uint64 st_dev;                      // 文件存放的设备ID
+    uint64 st_ino;                      // 索引节点号
+    uint32 st_mode;                     // 文件的属性掩码
+    uint32 st_nlink;                    // 硬链接的数量
+    uint32 st_uid;                      // 文件拥有者的用户ID
+    uint32 st_gid;                      // 文件拥有者的组ID
+    uint64 st_rdev;                     // 设备ID 仅对部分特殊文件有效
+    unsigned long __pad;
+    int st_size;                        // 文件大小 单位为字节
+    uint32 st_blksize;                  // 文件使用的存储块大小
+    int __pad2;
+    uint64 st_blocks;                   // 文件占用的存储块数量
+    long st_atime_sec;                  // 最后一次访问时间 秒
+    long st_atime_nsec;                 // 纳秒
+    long st_mtime_sec;                  // 最后一次修改时间 秒
+    long st_mtime_nsec;                 // 纳秒
+    long st_ctime_sec;                  // 最后一次改变状态的时间 秒
+    long st_ctime_nsec;                 // 纳秒
+    unsigned __unused[2];
+};
+
+inline int SYS_fstat(int fd, kstat* kst)
+{
+    // 获取文件状态的系统调用
+    // 输入fd为文件句柄 kst为接收保存文件状态的指针
+    // 目前只需要填充几个值
+    // 成功返回0 失败返回-1
+
+    if (kst == nullptr)
+    {
+        return -1;
+    }
+
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo = fom.get_from_fd(cur_proc->fo_head, fd);
+    if (fo == nullptr)
+    {
+        return -1;
+    }
+    FAT32FILE* file = fo->file;
+    if (file == nullptr)
+    {
+        return -1;
+    }
+    VMS::EnableAccessUser();
+    memset(kst, 0, sizeof(kstat));
+    kst->st_size = file->table.size;
+    kst->st_mode = fo->mode;
+    kst->st_nlink = 1;
+    // ... others to be added
+    VMS::DisableAccessUser();
+    return 0;
+}
 
 inline int SYS_clone(TRAPFRAME* tf, int flags, void* stack, int ptid, int tls, int ctid)
 {
@@ -108,7 +386,7 @@ inline int SYS_clone(TRAPFRAME* tf, int flags, void* stack, int ptid, int tls, i
     if (flags & SIGCHLD)
     {
         // clone的是子进程
-        pm.set_fa_proc(create_proc, cur_proc);
+        pm.set_proc_fa(create_proc, cur_proc);
     }
     pm.switchstat_proc(create_proc, Proc_ready);
     intr_restore(intr_flag);
@@ -123,6 +401,68 @@ inline int SYS_execve(const char* path, char* const argv[], char* const envp[])
     // argv参数是程序参数 envp参数是环境变量的数组指针 暂时未使用
     // 执行成功跳转执行对应的程序 失败则返回-1
 
+    proc_struct* cur_proc = pm.get_cur_proc();
+    FAT32FILE* file_open = nullptr;
+    // file_open = FAT32::open(path);          // 暂时文件系统还未完善 仅写个字面意义!!!
+    if (file_open == nullptr)
+    {
+        kout[red] << "SYS_execve open File Fail!" << endl;
+        return -1;
+    }
+    file_object* fo = (file_object*)kmalloc(sizeof(file_object));
+    fom.set_fo_file(fo, file_open);
+    fom.set_fo_pos_k(fo, 0);
+    fom.set_fo_flags(fo, 0);
+    fom.set_fo_fd(fo, -1);
+    proc_struct* new_proc = CreateProcessFromELF(fo, cur_proc->cur_work_dir, 0);
+    kfree(fo);
+    int exit_value = 0;
+    if (new_proc == nullptr)
+    {
+        kout[red] << "SYS_execve CreateProcessFromELF Fail!" << endl;
+        return -1;
+    }
+    else
+    {
+        // 这里的new_proc其实也是执行这个系统调用进程的子进程
+        // 因此这里父进程需要等待子进程执行完毕后才能继续执行
+        proc_struct* child = nullptr;
+        while (1)
+        {
+            // 去寻找已经结束的子进程
+            // 当前场景的执行逻辑上只会有一个子进程
+            proc_struct* pptr = nullptr;
+            for (pptr = cur_proc->fir_child;pptr != nullptr;pptr = pptr->bro_next)
+            {
+                if (pptr->stat == Proc_finished)
+                {
+                    child = pptr;
+                    break;
+                }
+            }
+            if (child == nullptr)
+            {
+                // 说明当前进程应该被阻塞了
+                // 触发进程管理下的信号wait条件
+                // 被阻塞之后就不会再调度这个进程了 需要等待子进程执行完毕后被唤醒
+                pm.calc_systime(cur_proc);
+                cur_proc->sem->wait();
+            }
+            else
+            {
+                // 在父进程里回收子进程
+                VMS::EnableAccessUser();
+                exit_value = child->exit_value;
+                VMS::DisableAccessUser();
+                pm.free_proc(child);
+                break;
+            }
+        }
+    }
+    // 顺利执行了execve并回收了子进程
+    // 当前进程就执行完毕了 直接退出
+    pm.exit_proc(cur_proc, exit_value);
+    kout[red] << "SYS_execve reached unreacheable branch!" << endl;
     return -1;
 }
 
@@ -174,7 +514,7 @@ inline int SYS_wait4(int pid, int* status, int options)
                 *status = child->exit_value << 8;   // 左移8位主要是Linux系统调用的规范
                 VMS::DisableAccessUser();
             }
-            pm.free_proc(child);                    // 回收子进程
+            pm.free_proc(child);                    // 回收子进程 子进程的回收只能让父进程来进行
             return ret;
         }
         else if (options & WNOHANG)
@@ -205,8 +545,8 @@ inline int SYS_getppid()
     {
         // 调用规范总是成功
         // 如果是无父进程 可以暂时认为将该进程挂到根进程的孩子进程下
-        pm.set_fa_proc(cur_proc, idle_proc);
-        return 0;
+        // pm.set_proc_fa(cur_proc, idle_proc);
+        return -1;
     }
     else
     {
@@ -224,27 +564,36 @@ inline int SYS_getpid()
     return cur_proc->pid;
 }
 
+inline int SYS_brk(uint64 brk)
+{
+    // 修改数据段大小的系统调用
+    // 即修改用户堆段空间
+    // 传入待修改的地址
+    // 成功返回0 失败返回-1
 
+    proc_struct* cur_proc = pm.get_cur_proc();
+    HMR* hmr = cur_proc->heap;
+    if (hmr == nullptr)
+    {
+        return -1;
+    }
+    if (brk == 0)
+    {
+        // Linux中应该返回0
+        // 这里测试应该返回用户heap堆段的brk地址
+        return hmr->breakpoint();
+    }
+    int64 brk_dlt = brk - hmr->breakpoint();
+    if (!hmr->resize(brk_dlt))
+    {
+        return -1;
+    }
+    return 0;
+}
 
+inline int SYS_munmap();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+inline long SYS_mmap();
 
 struct tms
 {
@@ -410,13 +759,6 @@ inline int SYS_nanosleep(timespec* req, timespec* rem)
 }
 
 
-
-
-
-
-
-
-
 // 系统调用方式遵循RISC-V ABI
 // 即调用号存放在a7寄存器中 6个参数分别存放在a0-a5寄存器中 返回值存放在a0寄存器中
 void trap_Syscall(TRAPFRAME* tf)
@@ -437,36 +779,53 @@ void trap_Syscall(TRAPFRAME* tf)
         tf->reg.a0 = SYS_getchar();
         break;
     case Sys_getcwd:
+        tf->reg.a0 = (uint64)SYS_getcwd((char*)tf->reg.a0, tf->reg.a1);
         break;
     case Sys_pipe2:
+        // ...
         break;
     case Sys_dup:
+        tf->reg.a0 = SYS_dup(tf->reg.a0);
         break;
     case Sys_dup3:
+        tf->reg.a0 = SYS_dup3(tf->reg.a0, tf->reg.a1);
         break;
     case Sys_chdir:
+        tf->reg.a0 = SYS_chdir((const char*)tf->reg.a0);
         break;
     case Sys_openat:
+        // ...
         break;
     case Sys_close:
+        tf->reg.a0 = SYS_close(tf->reg.a0);
         break;
     case Sys_getdents64:
+        // ...
         break;
     case Sys_read:
+        tf->reg.a0 = SYS_read(tf->reg.a0, (void*)tf->reg.a1, tf->reg.a2);
         break;
     case Sys_write:
+        tf->reg.a0 = SYS_write(tf->reg.a0, (void*)tf->reg.a1, tf->reg.a2);
         break;
     case Sys_linkat:
+        // ...
         break;
     case Sys_unlinkat:
+        // ...
         break;
     case Sys_mkdirat:
+        // ...
         break;
     case Sys_umount2:
+        tf->reg.a0 = SYS_umount2((const char*)tf->reg.a0, tf->reg.a1);
         break;
     case Sys_mount:
+        tf->reg.a0 = SYS_mount((const char*)tf->reg.a0, (const char*)tf->reg.a1,
+            (const char*)tf->reg.a2, tf->reg.a3, (const void*)tf->reg.a4);
         break;
     case Sys_fstat:
+        tf->reg.a0 = SYS_fstat(tf->reg.a0, (kstat*)tf->reg.a1);
         break;
     case Sys_clone:
         // kout[green] << tf->reg.a0 << endl;
@@ -475,6 +834,7 @@ void trap_Syscall(TRAPFRAME* tf)
         // kout[green] << tf->reg.a1 << endl;
         break;
     case Sys_execve:
+        tf->reg.a0 = SYS_execve((char*)tf->reg.a0, (char**)tf->reg.a1, (char**)tf->reg.a2);
         break;
     case Sys_wait4:
         tf->reg.a0 = SYS_wait4(tf->reg.a0, (int*)tf->reg.a1, tf->reg.a2);
@@ -489,10 +849,13 @@ void trap_Syscall(TRAPFRAME* tf)
         tf->reg.a0 = SYS_getpid();
         break;
     case Sys_brk:
+        tf->reg.a0 = SYS_brk(tf->reg.a0);
         break;
     case Sys_munmap:
+        // ...
         break;
     case Sys_mmap:
+        // ...
         break;
     case Sys_times:
         tf->reg.a0 = SYS_times((tms*)tf->reg.a0);

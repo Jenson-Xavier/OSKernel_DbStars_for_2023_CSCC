@@ -155,6 +155,22 @@ void* KOUT::memory(void* start_address, void* end_address, uint32 show)
     }
     return nullptr;
 }
+void* KOUT::memory(void* addr, uint64 size)
+{
+    uint32 i = 0;
+    while (i < size)
+    {
+        kout << Hex(i) << ' ';
+        unsigned char* p = (unsigned char*)addr;
+        for (int j = 0; j < 16; j++)
+        {
+            kout << ' ';
+            outHex(p[j + i]);
+        }
+        i += 16;
+        kout << endl;
+    }
+}
 
 KOUT& KOUT::operator<<(void* p)
 {

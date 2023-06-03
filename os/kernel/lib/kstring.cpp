@@ -30,8 +30,8 @@ char* strcpy_s(char* dst, const char* src)
     {
         //do nothing ...
     }
-    *p=0;
-    
+    *p = 0;
+
     return dst;
 }
 
@@ -57,6 +57,14 @@ int strcmp(const char* s1, const char* s2)
     auto cmp_value = (unsigned char)*s1 - (unsigned char)*s2;
     return (int)cmp_value;
 }
+
+void strcat(char* dst, const char* src)
+{
+    while (*dst != 0)
+        dst++;
+    strcpy(dst, src);
+}
+
 
 void* memset(void* s, char ch, uint64 size)
 {

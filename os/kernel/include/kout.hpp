@@ -4,8 +4,8 @@
 #include <sbi.h>
 #include <type.hpp>
 
-//在kout.hpp中定义的宏名结合相关定义
-//可以使用kout << Hex(x)的方式按16进制输出x
+// 在kout.hpp中定义的宏名结合相关定义
+// 可以使用kout << Hex(x)的方式按16进制输出x
 #define Hex KOUT::hex
 #define Memory KOUT::memory
 
@@ -79,6 +79,7 @@ public:
     // 最方便的实现就是按字节打印
     // 继续使用类似上面hex的方式实现
     static void* memory(void*, void*, uint32 show = 1);
+    static void* memory(void*, uint64 size);
 };
 
 KOUT& endl(KOUT& kout);

@@ -1,5 +1,39 @@
 #include <FAT32.hpp>
 
+FAT32FILE::FAT32FILE(FATtable ft, char* lName, uint64 _clus, uint64 pos, char* _path)
+{
+    table = ft;
+    clus = table.low_clus | (table.high_clus << 16);
+
+    TYPE |= table.type & 0x10 ? 1 : 0;
+    name = new char[strlen(lName) + 1];
+    strcpy(name, lName);
+    table_clus_pos = _clus;
+    table_clus_off = pos;
+    next = nullptr;
+    pre = nullptr;
+    fat = nullptr;
+    ref = 0;
+
+    if (_path)
+    {
+        path = new char[100];
+        strcpy(path, _path);
+    }
+}
+
+FAT32FILE::~FAT32FILE()
+{
+    delete[] name;
+    delete[] path;
+}
+bool FAT32FILE::set_path(char* _path)
+{
+    path = new char[100];
+    strcpy(path, _path);
+    return true;
+}
+
 int32 FATtable::get_name(char* REname)
 {
     int i;
@@ -12,7 +46,6 @@ int32 FATtable::get_name(char* REname)
         while (i < 10)
         {
             REname[j] = lname0[i];
-
             j++;
             i++;
         }
@@ -33,7 +66,11 @@ int32 FATtable::get_name(char* REname)
             i++;
         }
 
-        return attribute & 0xf;
+        return attribute;
+    }
+    else if (name[0] == 0x2e)
+    {
+        return -2;
     }
     else if (name[0] != 0xe5)
     {
@@ -87,7 +124,8 @@ bool FAT32::init()
     kout[yellow] << "Dbr.sector_size     " << Dbr.sector_size << endl;
     kout[yellow] << "Dbr.FAT_num         " << Dbr.FAT_num << endl;
     kout[yellow] << "Dbr.FAT_sector_num  " << Dbr.FAT_sector_num << endl;
-    kout[yellow] << "DAtAlba             " << DATAlba << endl;
+    kout[yellow] << "DATAlba             " << DATAlba << endl;
+    kout[yellow] << "ClusSector          " << Dbr.clus_sector_num << endl;
     dev.read(DBRlba, buf);
     for (int i = 0; i < 16; i++)
         kout[green] << buf[i] << ' ';
@@ -139,55 +177,80 @@ bool FAT32::get_clus(uint64 clus, unsigned char* buf)
     return true;
 }
 
-FAT32FILE* FAT32::get_child_form_clus(char* child_name, uint64 src_lba)
+bool FAT32::get_clus(uint64 clus, unsigned char* buf, uint64 start, uint64 end)
+{
+    if (clus >= 0xffffff7)
+    {
+        kout[red] << "can't find clus" << endl;
+        return false;
+    }
+
+    int lba = clus_to_lba(clus);
+
+    for (int i = 0; i < Dbr.clus_sector_num; i++)
+    {
+        dev.read(lba + i, buf + i * Dbr.sector_size);
+    }
+    for (uint64 i = start; i < end - start; i++)
+    {
+        buf[i] = buf[i + start];
+    }
+
+    return true;
+}
+FAT32FILE* FAT32::get_child_form_clus(char* child_name, uint64 src_clus)
 {
     // kout[blue]<<child_name<<' '<<src_lba<<endl;
     unsigned char* clus = new unsigned char[Dbr.clus_size];
-    for (int i = 0; i < Dbr.clus_sector_num; i++)
-    {
-        dev.read(src_lba + i, &clus[Dbr.sector_size * i]);
-    }
+    get_clus(src_clus, clus);
 
     FATtable* ft = (FATtable*)clus;
     FAT32FILE* re = nullptr;
 
     int32 t;
+    int32 k;
     char* sName = new char[30];
     sName[26] = 0;
     sName[27] = 0;
     char* lName = new char[100];
 
     // for (int i = 0; i < 10; i++)
-    for (int i = 0; i < Dbr.clus_size / 16; i++)
+    while (src_clus < 0xffffff8)
     {
-        while ((t = ft[i].get_name(sName)) > 0)
+        for (int i = 0; i < Dbr.clus_size / 32; i++)
         {
-            unicode_to_ascii(sName);
-            strcpy_no_end(&lName[(t - 1) * 13], sName);
-            i++;
+            while ((t = ft[i].get_name(sName)) > 0)
+            {
+                unicode_to_ascii(sName);
+                if (t & 0x40)
+                {
+                    // kout[red]<<"yes"<<endl;
+                    strcpy(&lName[((t & 0xf) - 1) * 13], sName);
+                }
+                else
+                    strcpy_no_end(&lName[((t & 0xf) - 1) * 13], sName);
+                // kout[purple] << sName << ' ' << t << endl;
+                i++;
+            }
+            if (t == -1)
+                continue;
+
+            // if (sName[6] != '~' || !isdigit(sName[7]))
+            //     strcpy(lName, sName);
+
+            // kout[green] << lName << endl;
+
+            if (strcmp(lName, child_name) == 0 && ft[i].attribute != 0xe5)
+            {
+                re = new FAT32FILE(ft[i], lName, src_clus, i);
+                delete[] sName;
+                delete[] clus;
+                return re;
+            }
         }
-        if (t == -1)
-            continue;
-
-        // if (sName[6] != '~' || !isdigit(sName[7]))
-        //     strcpy(lName, sName);
-
-        // kout[green] << lName << endl;
-
-        if (strcmp(lName, child_name) == 0)
-        {
-            re = new FAT32FILE;
-            memcpy(&(re->table), (char*)&ft[i], 32);
-            re->clus = re->table.low_clus | (re->table.high_clus << 16);
-
-            re->TYPE |= re->table.type & 0x10 ? 1 : 0;
-            re->name = lName;
-            re->table_clus_pos = lba_to_clus(src_lba);
-            re->table_clus_off = i;
-            delete[] sName;
-            delete[] clus;
-            return re;
-        }
+        src_clus = get_next_clus(src_clus);
+        if (src_clus < 0xffffff8)
+            get_clus(src_clus, clus);
     }
     delete[] sName;
     delete[] clus;
@@ -209,14 +272,14 @@ FAT32FILE* FAT32::FAT32::find_file_by_path(char* path)
 {
     char* sigleName = new char[50];
     unsigned char* clus = new unsigned char[Dbr.clus_size];
-    uint64 lba = DATAlba;
+    uint64 clus_n = Dbr.root_clus;
     FAT32FILE* tb;
 
     FATtable* ft;
     while (path = split_path_name(path, sigleName))
     {
         kout[green] << sigleName << endl;
-        tb = get_child_form_clus(sigleName, lba);
+        tb = get_child_form_clus(sigleName, clus_n);
         if (tb == nullptr)
         {
             kout[red] << "can't find file:" << sigleName << endl;
@@ -227,8 +290,8 @@ FAT32FILE* FAT32::FAT32::find_file_by_path(char* path)
             // kout[yellow] << tb->name << endl;
             if (tb->table.type & 0x10) // 目录
             {
+                clus_n = tb->table.low_clus | (uint64)tb->table.high_clus << 16;
                 // kout[yellow]<<"dir"<<endl;
-                lba = clus_to_lba(tb->table.low_clus | (uint64)tb->table.high_clus << 16);
             }
             else
             {
@@ -241,27 +304,134 @@ FAT32FILE* FAT32::FAT32::find_file_by_path(char* path)
     //     kout[red] << "error path:path is a dir " << path << endl;
     //     return nullptr;
     // }
+    if (tb)
+    {
+        tb->fat = this;
+    }
     delete[] sigleName;
+    // kout[blue]<<cpath<<endl;
     return tb;
 }
 
-bool FAT32::create_file(char* path, char* fileName)
+FAT32FILE* FAT32::create_file(FAT32FILE* dir, char* fileName, uint8 type)
 {
-    FAT32FILE* p;
-    p = find_file_by_path(path);
-    if (p == nullptr)
+    FATtable temp;
+    memset((unsigned char*)&temp, 0, 32);
+    if (dir == nullptr)
     {
-        kout[red] << "can't find dir :" << path << endl;
-        return false;
+        kout[red] << "dir isn't a nullptr" << endl;
+        return nullptr;
     }
-    else if (p->TYPE & 0x1)
+    else if (!(dir->TYPE & 0x1))
     {
-        kout[red] << path << "is not a director" << endl;
-        return false;
+        kout[red] << dir->name << "is not a director" << endl;
+        return nullptr;
     }
-    if (fileName)
+    uint32 len = strlen(fileName);
+    uint64 tclus;
+    unsigned char* buf = new unsigned char[Dbr.clus_size];
+    uint64 rclus = dir->clus;
+    get_clus(rclus, buf);
+
+    FATtable* ft = (FATtable*)buf;
+
+    int n = len / 13 + len % 13 ? 1 : 0;
+    int re;
+    // 创建目录项不会跨簇创建
+    while (rclus)
     {
+        // kout[red]<<rclus<<endl;
+        for (int i = 0; i < Dbr.clus_size / 32; i++)
+        {
+            int k = 0;
+            while (ft[i].attribute == 0 || ft[i].attribute == 0xe5)
+            {
+                k++;
+                i++;
+                if (k == n + 1)
+                {
+
+                    toshortname(fileName, (char*)&temp);
+                    // 设置时间
+                    temp.high_clus = 0;
+                    temp.low_clus = 0;
+                    temp.type = type;
+                    re = i;
+                    ft[i--] = temp;
+                    char* p = fileName;
+                    for (int j = 0; j < n; j++)
+                    {
+                        memset(&temp, 0, 32);
+                        temp.type = 0x0f;
+                        temp.attribute &= 0xf0;
+                        if (j == n - 1)
+                        {
+                            temp.attribute |= 0x40;
+                        }
+
+                        temp.attribute |= (j + 1 & 0xf);
+                        p = unicodecopy((int8*)temp.lname0, p, 5);
+                        p = unicodecopy((int8*)temp.lname1, p, 6);
+                        p = unicodecopy((int8*)temp.lname2, p, 2);
+                        ft[i--] = temp;
+                        // kout.memory(&temp, 32);
+                    }
+                    set_clus(rclus, buf);
+                    delete[] buf;
+                    FAT32FILE* rfile = new FAT32FILE(ft[re], fileName, rclus, re);
+                    rfile->TYPE = 0;
+                    return rfile;
+                }
+            }
+        }
+
+        tclus = rclus;
+        rclus = get_next_clus(rclus);
+        if (rclus < 0xffffff8)
+            get_clus(rclus, buf);
+        else
+        {
+            rclus = find_empty_clus();
+            set_next_clus(tclus, rclus);
+            get_clus(rclus, buf);
+        }
     }
+
+    delete[] buf;
+    return nullptr;
+}
+
+FAT32FILE* FAT32::create_dir(FAT32FILE* dir, char* fileName)
+{
+    FAT32FILE* re;
+    re = create_file(dir, fileName, FATtable::SUBDIRENCTORY);
+    uint64 rclus = find_empty_clus();
+    re->table.high_clus |= (rclus >> 16) & 0xff;
+    re->table.low_clus |= rclus & 0xff;
+    re->clus = rclus;
+    set_table(re); // 更新目录项
+
+    // 设置.文件
+    uint8* clus = new uint8[Dbr.clus_size];
+    get_clus(re->clus, clus);
+    FATtable* ft;
+    ft = (FATtable*)clus;
+    FATtable temp;
+
+    temp = re->table;
+    strcpy_no_end(temp.name, ".          ");
+    ft[0] = temp;
+
+    temp = re->table;
+    strcpy_no_end(temp.name, "..         ");
+    temp.low_clus = re->table_clus_pos & 0xffff;
+    temp.high_clus = (re->table_clus_pos >> 16) & 0xffff;
+    ft[1] = temp;
+
+    set_clus(re->clus, clus);
+
+    delete[] clus;
+    return re;
 }
 
 FAT32FILE* FAT32::open(char* path)
@@ -274,32 +444,86 @@ bool FAT32::close(FAT32FILE* p)
     return 0;
 }
 
-int FAT32::read(FAT32FILE* src, unsigned char* buf, uint64 size)
+int64 FAT32FILE::read(unsigned char* buf, uint64 size)
 {
-
-    int n = size / Dbr.clus_size;
-    uint64 clus = src->clus;
-    unsigned char* p = new unsigned char[Dbr.sector_size];
-    for (int i = 0; i <= n; i++)
+    if (size == 0)
     {
-        get_clus(clus, &buf[i * Dbr.clus_size]);
-        clus = get_next_clus(clus);
+        kout[yellow] << "There is nothing" << endl;
+        return 0;
+    }
+    if (size < table.size)
+    {
+        size = table.size;
+    }
+
+    int n = size / fat->Dbr.clus_size + size % fat->Dbr.clus_size ? 1 : 0;
+    kout << n << endl;
+    unsigned char* p = new unsigned char[fat->Dbr.sector_size];
+    uint64 rclus = clus;
+    for (int i = 0; i < n; i++)
+    {
+        if (rclus < 2 || rclus >= 0xffffff7)
+            return -1;
+
+        fat->get_clus(rclus, &buf[i * fat->Dbr.clus_size]);
+        rclus = fat->get_next_clus(rclus);
     }
     buf[size] = 0;
     delete[] p;
-    return n;
+    return size;
+}
+int64 FAT32FILE::read(unsigned char* buf, uint64 pos, uint64 size)
+{
+    if (size == 0 && pos + size > table.size)
+    {
+        kout[yellow] << "There is nothing" << endl;
+        return 0;
+    }
+    if (pos + size > table.size)
+    {
+        size = table.size - pos;
+
+    }
+    uint64 start = pos / fat->Dbr.clus_size;
+    uint64 end = (pos + size) / fat->Dbr.clus_size + (pos + size) % fat->Dbr.clus_size ? 1 : 0;
+    uint64 rclus = clus;
+    unsigned char* p = new unsigned char[end - start];
+
+
+    for (int i = 0; i < end - start; i++)
+    {
+        if (rclus < 2 || rclus >= 0xffffff7)
+            return -1;
+
+        fat->get_clus(rclus, &p[i * fat->Dbr.clus_size]);
+        rclus = fat->get_next_clus(rclus);
+
+    }
+
+
+    for (int i = 0; i < size; i++)
+    {
+        buf[i] = p[pos + i];
+    }
+
+
+    delete[] p;
+    return size;
 }
 
 uint64 FAT32::find_empty_clus()
 {
     uint32* p = (uint32*)new unsigned char[Dbr.sector_size];
+
     for (int i = 0; i < Dbr.FAT_sector_num; i++)
     {
         dev.read(FAT1lba + i, (uint8*)p);
         for (int j = 0; j < sector_size / 4; j++)
         {
-            if (p[i] == 0)
-                return i * Dbr.sector_size + j;
+            // kout[red]<<p[j]<<' ';
+
+            if (p[j] == 0)
+                return i * Dbr.sector_size / 4 + j;
         }
     }
 
@@ -309,50 +533,97 @@ uint64 FAT32::find_empty_clus()
 
 bool FAT32::del_file(FAT32FILE* file)
 {
-    unsigned char* p = new unsigned char[Dbr.sector_size];
-    uint64 sec = clus_to_lba(file->table_clus_pos) + file->table_clus_off * 32 / sector_size;
+    FATtable* p = (FATtable*)new unsigned char[Dbr.clus_size];
+    get_clus(file->table_clus_pos, (unsigned char*)p);
 
-    while (sec >= DATAlba)
+    if ((file->TYPE & FAT32FILE::__DIR) && !(file->TYPE & FAT32FILE::__SPECICAL))
     {
-        dev.read(sec, p);
-        p[(file->table_clus_off * 32) % Dbr.sector_size] = 0xe5;
+        FAT32FILE* t;
+        t = get_next_file(file);
+        t->show();
+        while (t)
+        {
+            del_file(t);
+            t = get_next_file(file, t, EXCEPTDOT);
+        }
     }
+
+    uint64 k = file->table_clus_off;
+    p[k].type1 = 0x0f;
+    while (p[k].attribute != 0xe5 && p[k].type1 == 0x0f)
+    {
+        p[k].attribute = 0xe5;
+        k--;
+    }
+    set_clus(file->table_clus_pos, (unsigned char*)p);
+
+    uint64 rclus = file->clus;
+    uint64 nxt;
+
+    if (rclus >= 2)
+    {
+        while (rclus < 0xffffff7)
+        {
+            nxt = get_next_clus(rclus);
+            set_next_clus(rclus, 0);
+            rclus = nxt;
+        }
+    }
+
+    set_next_clus(rclus, 0);
+
     delete[] p;
 }
-bool FAT32::write(FAT32FILE* dst, unsigned char* src, uint64 size)
+bool FAT32FILE::write(unsigned char* src, uint64 size)
 {
-    if (dst->TYPE & 0x1)
+    if (TYPE & 0x1)
     {
         kout[red] << "this is a director" << endl;
         return false;
     }
-    uint64 clus = get_next_clus(dst->clus);
-    uint64 nxt;
-    while (clus < 0xffffff7)
+
+    uint64 rclus;
+
+    if (clus >= 2 && clus < 0xffffff8)
     {
-        nxt = get_next_clus(clus);
-        set_next_clus(clus, 0);
-        clus = nxt;
+        rclus = fat->get_next_clus(clus);
+    }
+    else
+    {
+        clus = fat->find_empty_clus();
+        rclus = 0xffffff8;
+    }
+    kout[green] << clus << endl;
+
+    uint64 nxt;
+
+    while (rclus < 0xffffff8 && rclus >= 2)
+    {
+        nxt = fat->get_next_clus(rclus);
+        fat->set_next_clus(rclus, 0);
+        rclus = nxt;
     }
 
-    set_clus(dst->clus, src);
-    clus = dst->clus;
+    fat->set_clus(clus, src);
 
-    if (size > Dbr.clus_size)
+
+    rclus = clus;
+
+    if (size > fat->Dbr.clus_size)
     {
-        for (int i = 1; i < size / Dbr.clus_size + (size % Dbr.clus_size ? 1 : 0); i++)
+        for (int i = 1; i < size / fat->Dbr.clus_size + (size % fat->Dbr.clus_size ? 1 : 0); i++)
         {
-            nxt = find_empty_clus();
-            set_next_clus(clus, nxt);
-            clus = nxt;
-            set_clus(clus, &src[Dbr.clus_size * i]);
+            nxt = fat->find_empty_clus();
+            fat->set_next_clus(rclus, nxt);
+            rclus = nxt;
+            fat->set_clus(rclus, &src[fat->Dbr.clus_size * i]);
         }
     }
-    set_next_clus(clus, 0xfffffff);
+    fat->set_next_clus(rclus, 0xfffffff);
 
-    dst->table.size = size;
-    //设置时间
-    set_table(dst);
+    table.size = size;
+    // 设置时间
+    fat->set_table(this);
 
     return true;
 }
@@ -370,8 +641,10 @@ void FAT32FILE::show()
 {
 
     kout << "name " << name << endl
-        << "TYPE " << TYPE << endl
-        << "SIZE " << table.size << endl
+        << "TYPE " << TYPE << endl;
+    if (path)
+        kout << "PATH " << path << endl;
+    kout << "SIZE " << table.size << endl
         << "CLUS " << clus << endl
         << "POS  " << table_clus_pos << endl
         << "OFF  " << table_clus_off << endl
@@ -426,6 +699,89 @@ FAT32::~FAT32()
     delete[] temp;
 }
 
+FAT32FILE* FAT32::get_next_file(FAT32FILE* dir, FAT32FILE* cur, bool (*p)(FATtable* temp))
+{
+    if (!(dir->TYPE & FAT32FILE::__DIR))
+    {
+        kout[red] << dir->name << "isn't a dir" << endl;
+        return nullptr;
+    }
+    unsigned char* clus = new unsigned char[Dbr.clus_size];
+    uint64 src_clus;
+    if (cur)
+        src_clus = cur->table_clus_pos;
+    else
+        src_clus = dir->clus;
+
+    get_clus(src_clus, clus);
+    FATtable* ft = (FATtable*)clus;
+    FAT32FILE* re = nullptr;
+
+    int32 t;
+    int32 k;
+    char* sName = new char[30];
+    sName[26] = 0;
+    sName[27] = 0;
+    char* lName = new char[100];
+    uint64 pos = cur ? cur->table_clus_off + 1 : 0; // 当没传入cur时从文件初开始遍历；
+
+    while (src_clus < 0xffffff8)
+    {
+        for (int i = pos; i < Dbr.clus_size / 32; i++)
+        {
+            while ((t = ft[i].get_name(sName)) > 0)
+            {
+                unicode_to_ascii(sName);
+                if (t & 0x40)
+                {
+                    // kout[red]<<"yes"<<endl;
+                    strcpy(&lName[((t & 0xf) - 1) * 13], sName);
+                }
+                else
+                    strcpy_no_end(&lName[((t & 0xf) - 1) * 13], sName);
+                i++;
+            }
+            if (t == -1)
+                continue;
+            if (t == -2)
+            {
+                if (ft[i].name[1] == '.')
+                    strcpy(lName, "..");
+                else
+                    strcpy(lName, ".");
+            }
+
+            // if (strcmp("mnt",lName)==0)
+            // kout[red]<<"find!!!";
+            //     strcpy(lName, sName);
+
+            // kout[green] << lName << endl;
+
+            if (p(&ft[i]))
+            {
+                re = new FAT32FILE(ft[i], lName, src_clus, i);
+                // kout<<lName<<' '<<Hex(clus_to_lba(src_clus)*512);
+                if (t == -2)
+                    re->TYPE |= FAT32FILE::__SPECICAL;
+
+                delete[] sName;
+                delete[] lName;
+                delete[] clus;
+                return re;
+            }
+        }
+        pos = 0;
+        src_clus = get_next_clus(src_clus);
+        if (src_clus < 0xffffff8)
+            get_clus(src_clus, clus);
+    }
+
+    delete[] sName;
+    delete[] clus;
+    delete[] lName;
+    return re;
+}
+
 bool FAT32::set_table(FAT32FILE* file)
 {
     FATtable* ft;
@@ -435,4 +791,18 @@ bool FAT32::set_table(FAT32FILE* file)
     set_clus(file->table_clus_pos, temp);
 
     return true;
+}
+
+bool ALLTURE(FATtable* t)
+{
+    return true;
+}
+bool VALID(FATtable* t)
+{
+    return t->attribute != 0xe5;
+}
+
+bool EXCEPTDOT(FATtable* t)
+{
+    return t->attribute != 0x2e;
 }

@@ -8,9 +8,10 @@
 #include <process.hpp>
 #include <synchronize.hpp>
 #include <resources.hpp>
-
+#include <fileobject.hpp>
+#include <vfsm.hpp>
 #include <FAT32.hpp>
-
+#include <parseELF.hpp>
 #include <ramdisk_driver.hpp>
 
 extern "C" void __cxa_pure_virtual()
@@ -319,7 +320,7 @@ void test_user_img_fronfunc()
     };
     uint64 ts = (uint64)get_resource_begin(test_img);
     uint64 te = (uint64)get_resource_end(test_img);
-    CreateUserImafromFunc(func, (void*)"ABCDEFG", ts, te, (char*)"u_test");
+    CreateUserImgfromFunc(func, (void*)"ABCDEFG", ts, te, (char*)"u_test");
 }
 
 void test_more_user_img_process()
@@ -398,15 +399,16 @@ void test_filetable()
     FAT32 fat;
     FAT32FILE* t;
     char* buf;
-    t = fat.open("/test.img");
+    t = fat.open("/test_echo");
     t->show();
 
     // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
     // t->show();
 
     buf = new char[t->table.size];
-    fat.read(t, (unsigned char*)buf, t->table.size);
-    kout.memory(buf, buf + t->table.size);
+    // fat.read(t, (unsigned char*)buf, t->table.size);
+    // kout.memory(buf, buf + t->table.size);
+
     // fat.write(t,(unsigned char *)"hello",6);
     // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
     // t->show();
@@ -420,6 +422,134 @@ void test_filetable()
     // test_memory();
     // test_user_img_process();
     // vfsm.Init();
+}
+
+void test_fo_list()
+{
+    proc_struct* test_proc = pm.alloc_proc();
+    pm.init_proc(test_proc, 1);
+    file_object* test_fo_head = test_proc->fo_head;
+    kout << "The fo list's length is " << fom.get_count_fdt(test_fo_head) << endl;
+    fom.create_flobj(test_fo_head, -1);
+    fom.create_flobj(test_fo_head, 5);
+    kout << "The fo list's length is " << fom.get_count_fdt(test_fo_head) << endl;
+    // kout[yellow] << "TTT" << endl;
+    file_object* test_ptr = fom.get_from_fd(test_fo_head, 3);
+    kout << "The fo's fd is " << test_ptr->fd << endl;
+    kout << "The fo's flags is " << test_ptr->flags << endl;
+    test_ptr = fom.get_from_fd(test_fo_head, 4);
+    test_ptr = fom.get_from_fd(test_fo_head, 5);
+    kout << "The fo's fd is " << test_ptr->fd << endl;
+    test_ptr = fom.get_from_fd(test_fo_head, 3);
+    fom.delete_flobj(test_fo_head, test_ptr);
+    kout << "The fo list's length is " << fom.get_count_fdt(test_fo_head) << endl;
+    test_ptr = fom.get_from_fd(test_fo_head, 5);
+    fom.set_fo_fd(test_ptr, 3);
+    kout << "The fo list's length is " << fom.get_count_fdt(test_fo_head) << endl;
+    kout << "The fo's fd is " << test_ptr->fd << endl;
+    fom.free_all_flobj(test_fo_head);
+    kout[green] << (uint64)test_fo_head << endl;
+    kout << "The fo list's length is " << fom.get_count_fdt(test_fo_head) << endl;
+    pm.free_proc(test_proc);
+    kout[green] << pm.get_proc_count() << endl;
+}
+
+void test_filevfsm()
+{
+    kout[blue] << (uint64)sizeof(FATtable) << endl;
+    FATtable p;
+    FAT32FILE* t;
+
+    char* buf;
+
+    buf = new char[100];
+    char* txt;
+    txt = new char[100];
+    strcpy(txt, "abcdefg");
+
+    // vfsm.create_file("/", "/", "fuck.txt", FATtable::FILE);
+    // t = vfsm.open("/fuck.txt", "/");
+    // t->show();
+    // t->write((unsigned char *)"fuckfuck", 10);
+    // // kout<<"error"<<endl;
+    // t->show();
+    // t->read((unsigned char *)buf, 10);
+    // kout[green] << buf << endl;
+    // vfsm.close(t);
+    buf = new char[100];
+    vfsm.create_file("/mnt", "/", "ff");
+    t = vfsm.open("/mnt/ff", "/");
+    t->write((uint8*)txt, 7);
+    t->read((uint8*)buf, 2, 3);
+    kout[red] << buf << endl;
+    // t->show();
+
+    // FAT32FILE *o;
+    // o = t->fat->get_next_file(t);
+    // while (o)
+    // {
+    //     o->show();
+    //     if (strcmp(o->name,"ffst_mount")==0)
+    //     {
+    //         kout.memory(&o->table,32);
+    //     }
+
+    //     o = t->fat->get_next_file(t,o);
+    // }
+
+    // t=vfsm.open("/mnt/ff","/");
+    // t->show();
+
+    // t=fat.get_next_file(vfsm.get_root());
+    // while (t)
+    // {
+    //     t->show();
+    //     t=fat.get_next_file(vfsm.get_root(),t);
+    // }
+
+    // t = fat.open("/mnt");
+    // t->show();
+    // kout << "!!!!!!!!!!!" << endl;
+    // t1 = fat.get_next_file(t);
+    // while (t1)
+    // {
+    //     t1->show();
+    //     kout[green]<<t1->table.low_clus<<endl;
+    //     t1 = fat.get_next_file(t, t1);
+    // }
+
+    // fat.del_file(t);
+    // kout[red]<<"sad"<<endl;
+    // t=fat.open("/mnt/test_mount");
+    // kout<<Hex(t->table.attribute);
+    // t->show();
+
+    // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
+    // t->show();
+
+    // buf = new char[t->table.size];
+    // fat.read(t, (unsigned char*)buf, t->table.size);
+    // kout.memory(buf, buf + t->table.size);
+    // fat.write(t,(unsigned char *)"hello",6);
+    // t = fat.open("/0123456789abcdefghqwertyuiop.txt");
+    // t->show();
+    // fat.read(t,(unsigned char *)buf,10);
+    // kout<<buf;
+
+    delete[] buf;
+
+    // test_fat32device_driver();
+    // test_memory();
+    // test_user_img_process();
+    // vfsm.Init();    
+}
+
+void test_elfparse()
+{
+    file_object* fo = (file_object*)kmalloc(sizeof(file_object));
+    FAT32FILE* file = vfsm.open("/brk", ".");
+    fom.set_fo_file(fo, file);
+    CreateProcessFromELF(fo, "/");
 }
 
 int main()
@@ -439,10 +569,12 @@ int main()
     pmm.Init();
     VMS::Static_Init();
     pm.Init();
-
+    vfsm.init();
+    
     // test_more_user_img_process();
+    // test_filevfsm();
 
-    test_filetable();
+    test_elfparse();
 
     while (1)
     {

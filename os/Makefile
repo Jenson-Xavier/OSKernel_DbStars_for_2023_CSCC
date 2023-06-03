@@ -7,7 +7,7 @@ Build/Kernel/kstring.elf Build/Kernel/trap.elf Build/Kernel/trapEntry.elf Build/
 Build/Kernel/interrupt.elf Build/Kernel/pmm.elf Build/Kernel/vmm.elf Build/Kernel/process.elf \
 Build/Kernel/syscall.elf Build/Kernel/Process_S.elf Build/Kernel/spinlock.elf Build/Kernel/mutex.elf \
 Build/Kernel/semaphore.elf Build/Kernel/pathtool.elf Build/Kernel/ramdisk_driver.elf \
-Build/Kernel/FAT32.elf \
+Build/Kernel/FAT32.elf  Build/Kernel/fileobject.elf Build/Kernel/vfsm.elf Build/Kernel/parseELF.elf \
 #Build/Kernel/vfs.elf Build/Kernel/fat32.elf
 	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld \
 	Build/Kernel/main.elf \
@@ -23,8 +23,11 @@ Build/Kernel/FAT32.elf \
 	Build/Kernel/vmm.elf \
 	Build/Kernel/ramdisk_driver.elf \
 	Build/Kernel/FAT32.elf \
+	Build/Kernel/vfsm.elf \
+	Build/Kernel/fileobject.elf \
 	Build/Kernel/process.elf \
 	Build/Kernel/Process_S.elf \
+	Build/Kernel/parseELF.elf \
 	Build/Kernel/spinlock.elf \
 	Build/Kernel/mutex.elf \
 	Build/Kernel/pathtool.elf \
@@ -80,12 +83,21 @@ Build/Kernel/process.elf:kernel/process/process.cpp
 Build/Kernel/Process_S.elf:kernel/process/Process.S
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/Process.S -o Build/Kernel/Process_S.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
 
+Build/Kernel/parseELF.elf:kernel/process/parseELF.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/process/parseELF.cpp -o Build/Kernel/parseELF.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
 #file
 Build/Kernel/vfs.elf:kernel/file/vfs.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/vfs.cpp -o Build/Kernel/vfs.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
 
+Build/Kernel/vfsm.elf:kernel/file/vfsm.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/vfsm.cpp -o Build/Kernel/vfsm.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+	
 Build/Kernel/pathtool.elf:kernel/file/pathtool.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/pathtool.cpp -o Build/Kernel/pathtool.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
+Build/Kernel/fileobject.elf:kernel/file/fileobject.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/file/fileobject.cpp -o Build/Kernel/fileobject.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
 
 # Build/Kernel/fat32.elf:kernel/file/fat32.cpp
 # riscv64-unknown-elf-g++ -nostdlib -c kernel/file/fat32.cpp -o Build/Kernel/fat32.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
