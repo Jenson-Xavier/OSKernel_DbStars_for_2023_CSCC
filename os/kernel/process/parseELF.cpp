@@ -40,7 +40,6 @@ int start_process_formELF(void* userdata)
         {
         case P_type::PT_LOAD:
             // 读到可装载的段了可以直接退出
-            kout << "TT" << endl;
             break;
         default:
             // 其他的情况输出相关提示信息即可
@@ -65,6 +64,15 @@ int start_process_formELF(void* userdata)
             continue;
         }
 
+        // kout[purple] << "p_align: " << Hex(pgm_hdr.p_align) << endl;
+        // kout[purple] << "p_filesz: " << Hex(pgm_hdr.p_filesz) << endl;
+        // kout[purple] << "p_flags: " << Hex(pgm_hdr.p_flags) << endl;
+        // kout[purple] << "p_memsz: " << Hex(pgm_hdr.p_memsz) << endl;
+        // kout[purple] << "p_offset: " << Hex(pgm_hdr.p_offset) << endl;
+        // kout[purple] << "p_paddr: " << Hex(pgm_hdr.p_paddr) << endl;
+        // kout[purple] << "p_type: " << Hex(pgm_hdr.p_type) << endl;
+        // kout[purple] << "p_vaddr: " << Hex(pgm_hdr.p_vaddr) << endl;
+
         // 统计相关信息
         // 加入VMR
         uint32 vmr_flags = 0;
@@ -73,25 +81,15 @@ int start_process_formELF(void* userdata)
         // 可写权限是最高权限 可以覆盖其他两个
         if (ph_flags & P_flags::PF_R)
         {
-            kout << "SS" << endl;
             vmr_flags |= 0b1;
             vmr_flags |= 0b100;
         }
         if (ph_flags & P_flags::PF_X)
         {
-            kout << "SSS" << endl;
             vmr_flags |= 0b100;
             vmr_flags |= 0b1;
         }
-        if (ph_flags & P_flags::PF_W)
-        {
-            kout << "S" << endl;
-        }
-        if (ph_flags & P_flags::PF_MASKPROC)
-        {
-            kout << "SSSS" << endl;
-        }
-        vmr_flags = VM_rwx;
+        vmr_flags |= 0b10;
         // 权限统计完 可以在进程的虚拟空间中加入这一片VMR区域了
         // 这边使用的memsz信息来作为vmr的信息
         // 输出提示信息
@@ -101,13 +99,11 @@ int start_process_formELF(void* userdata)
         kout[green] << "Add VMR from " << vmr_begin << " to " << vmr_end << endl;
 
         VMR* vmr_add = (VMR*)kmalloc(sizeof(VMR));
-
         vmr_add->Init(vmr_begin, vmr_end, vmr_flags);
         vms->insert(vmr_add);
-        kout[yellow] << "BREAK!" << endl;
-        kout[yellow] << Hex(vmr_begin) << endl;
+
         memset((char*)vmr_begin, 0, vmr_memsize);
-        kout[yellow] << "BREAK!" << endl;
+
         uint64 tmp_end = vmr_add->GetEnd();
         if (tmp_end > breakpoint)
         {
@@ -120,14 +116,15 @@ int start_process_formELF(void* userdata)
         // 将对应的内容存放到进程中vaddr的区域
         // 这边就是用filesz来读取具体的内容
         fom.seek_fo(fo, pgm_hdr.p_offset, file_ptr::Seek_beg);
-        rd_size = fom.read_fo(fo, &vmr_begin, pgm_hdr.p_filesz);
+        rd_size = fom.read_fo(fo, (void*)vmr_begin, pgm_hdr.p_filesz);
         if (rd_size != pgm_hdr.p_filesz)
         {
             kout[red] << "Read ELF program header in file Fail!" << endl;
             return -1;
         }
+        // kout << Hex((uint64)(vmr_begin)) << endl;
+        // kout << Memory((void*)0x1000, (void*)0x2000, 100);
     }
-
 
     // 上面的循环已经读取了所有的段信息
     // 接下来更新进程需要的相关信息即可
@@ -153,7 +150,7 @@ int start_process_formELF(void* userdata)
 
     // 正确完整地执行了这个流程
     // 接触阻塞并且返回0
-    proc_data->sem.signal();
+    // proc_data->sem.signal();
     return 0;
 }
 
@@ -183,7 +180,7 @@ proc_struct* CreateProcessFromELF(file_object* fo, const char* wk_dir, int proc_
     pm.set_proc_kstk(proc, nullptr, KERNELSTACKSIZE * 4);
     pm.set_proc_vms(proc, vms);
     pm.set_proc_fa(proc, pm.get_cur_proc());
-
+    
     // 通过vfsm得到标准化的绝对路径
     char* abs_cwd = vfsm.unified_path(wk_dir, pm.get_cur_proc()->cur_work_dir);
     pm.set_proc_cwd(proc, abs_cwd);
@@ -194,6 +191,7 @@ proc_struct* CreateProcessFromELF(file_object* fo, const char* wk_dir, int proc_
     proc_data->vms = vms;
     proc_data->proc = proc;
     uint64 user_start_addr = proc_data->e_header.e_entry;
+
     pm.start_user_proc(proc, start_process_formELF, proc_data, user_start_addr);
 
     // 这里跳转到启动函数之后进程管理就会有其他进程参与轮转调度了

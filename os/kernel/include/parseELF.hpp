@@ -74,12 +74,12 @@ struct Elf_Ehdr
 struct Elf_Phdr
 {
     uint32 p_type;                          // 本程序头描述的段的类型
+    uint32 p_flags;                         // 本段内容的属性
     uint64 p_offset;                        // 本段内容在文件中的位置 段内容的开始位置相对于文件头的偏移量
     uint64 p_vaddr;                         // 本段内容的开始位置在进程空间中的虚拟地址
     uint64 p_paddr;                         // 本段内容的开始位置在进程空间中的物理地址
     uint64 p_filesz;                        // 本段内容在文件中的大小 以字节为单位
     uint64 p_memsz;                         // 本段内容在内容镜像中的大小
-    uint32 p_flags;                         // 本段内容的属性
     uint64 p_align;                         // 对齐方式 可装载段来讲应该要向内存页面对齐
 }__attribute__((packed));
 

@@ -40,8 +40,8 @@ void ProcessQueueManager::destroy_pq(proc_queue& pq)
     while (ptr != nullptr)
     {
         ListNode* t = ptr->next;
-        ptr = ptr->next;
-        kfree(t);
+        kfree(ptr);
+        ptr = t;
     }
     pq.front = pq.rear = nullptr;
 }
@@ -141,6 +141,7 @@ int SEMAPHORE::wait(proc_struct* proc)
         // 事实上这里wait_queue的作用就是确定接触阻塞的顺序(公平的FIFO)
         // 这样强信号量的设计可以被证明可以保证互斥场景下不会饥饿的情况
         // 而如果不设计队列而只是改变状态这里就会可能出现饥饿的情况
+        pm.wait_ref_proc(proc);
         pm.switchstat_proc(proc, Proc_sleeping);
         value--;
     }
@@ -160,7 +161,7 @@ int SEMAPHORE::wait(proc_struct* proc)
     return value;
 }
 
-void SEMAPHORE::signal(proc_struct* proc)
+void SEMAPHORE::signal()
 {
     bool intr_flag;
     intr_save(intr_flag);
@@ -170,9 +171,22 @@ void SEMAPHORE::signal(proc_struct* proc)
         // 会唤醒一个进程 即将一个进程从等待队列中移除
         // 这并不是立即执行的意思 所以这里不需要立即触发调度器
         proc_struct* proc = pqm.front_pq(wait_pq);
-        pqm.dequeue_pq(wait_pq);
-        pm.switchstat_proc(proc, Proc_ready);
-        value++;
+        pm.wait_unref_proc(proc);
+        if (!pm.is_signal(proc))
+        {
+            // 说明还是不能够唤醒
+            // 但是这个信号量上的进程队列需要被弹出
+            value++;
+            pqm.dequeue_pq(wait_pq);
+        }
+        else
+        {
+            // 可以被唤醒
+            // 多一个状态的切换
+            pqm.dequeue_pq(wait_pq);
+            pm.switchstat_proc(proc, Proc_ready);
+            value++;
+        }
     }
     else
     {
@@ -186,16 +200,22 @@ bool SEMAPHORE::destroy()
 {
     // 当这个信号量的进程队列上没有等待的进程时
     // 才可以销毁这个信号量的进程队列
-    if (pqm.isempty_pq(wait_pq))
-    {
-        pqm.destroy_pq(wait_pq);
-        return true;
-    }
-    else
-    {
-        kout[red] << "The Semaphore's wait queue is NOT Empty!" << endl;
-        return false;
-    }
+    // if (pqm.isempty_pq(wait_pq))
+    // {
+    //     pqm.destroy_pq(wait_pq);
+    //     return true;
+    // }
+    // else
+    // {
+    //     kout[red] << "The Semaphore's wait queue is NOT Empty!" << endl;
+    //     return false;
+    // }
+
+    // 某些奇怪的逻辑
+    // 不够当需要调用destroy时一定是对于单个进程的销毁了
+    // 强制销毁即可
+    pqm.destroy_pq(wait_pq);
+    return true;
 }
 
 // 提供给全局任意使用

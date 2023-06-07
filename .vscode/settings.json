@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "sbi.h": "c",
+        "_plic.h": "c"
+    }
+}

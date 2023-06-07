@@ -27,6 +27,7 @@ FAT32FILE::~FAT32FILE()
     delete[] name;
     delete[] path;
 }
+
 bool FAT32FILE::set_path(char* _path)
 {
     path = new char[100];
@@ -99,7 +100,9 @@ bool FAT32::init()
     // dev.init();
     DBRlba = 0;
     unsigned char* buf = new unsigned char[512];
+
     dev.init();
+
     dev.read(DBRlba, buf);
     if (buf[510] != 0x55 || buf[511] != 0xaa)
     {
@@ -149,8 +152,6 @@ bool FAT32::init()
         kout[green] << (char)buf[i] << ' ';
     kout[green] << endl;
 
-    temp = new unsigned char[Dbr.clus_size];
-
     delete[] buf;
     return true;
 }
@@ -169,6 +170,7 @@ bool FAT32::get_clus(uint64 clus, unsigned char* buf)
     }
 
     int lba = clus_to_lba(clus);
+    // kout<<lba<<endl;
     for (int i = 0; i < Dbr.clus_sector_num; i++)
     {
         dev.read(lba + i, buf + i * Dbr.sector_size);
@@ -198,12 +200,12 @@ bool FAT32::get_clus(uint64 clus, unsigned char* buf, uint64 start, uint64 end)
 
     return true;
 }
+
 FAT32FILE* FAT32::get_child_form_clus(char* child_name, uint64 src_clus)
 {
     // kout[blue]<<child_name<<' '<<src_lba<<endl;
     unsigned char* clus = new unsigned char[Dbr.clus_size];
     get_clus(src_clus, clus);
-
     FATtable* ft = (FATtable*)clus;
     FAT32FILE* re = nullptr;
 
@@ -224,12 +226,12 @@ FAT32FILE* FAT32::get_child_form_clus(char* child_name, uint64 src_clus)
                 unicode_to_ascii(sName);
                 if (t & 0x40)
                 {
-                    // kout[red]<<"yes"<<endl;
+                    kout[red] << "yes" << endl;
                     strcpy(&lName[((t & 0xf) - 1) * 13], sName);
                 }
                 else
                     strcpy_no_end(&lName[((t & 0xf) - 1) * 13], sName);
-                // kout[purple] << sName << ' ' << t << endl;
+                kout[purple] << sName << ' ' << t << endl;
                 i++;
             }
             if (t == -1)
@@ -248,6 +250,8 @@ FAT32FILE* FAT32::get_child_form_clus(char* child_name, uint64 src_clus)
                 return re;
             }
         }
+
+        kout[yellow] << src_clus << endl;
         src_clus = get_next_clus(src_clus);
         if (src_clus < 0xffffff8)
             get_clus(src_clus, clus);
@@ -451,12 +455,12 @@ int64 FAT32FILE::read(unsigned char* buf, uint64 size)
         kout[yellow] << "There is nothing" << endl;
         return 0;
     }
-    if (size < table.size)
+    if (size > table.size)
     {
         size = table.size;
     }
 
-    int n = size / fat->Dbr.clus_size + size % fat->Dbr.clus_size ? 1 : 0;
+    int n = size / fat->Dbr.clus_size + (size % fat->Dbr.clus_size ? 1 : 0);
     kout << n << endl;
     unsigned char* p = new unsigned char[fat->Dbr.sector_size];
     uint64 rclus = clus;
@@ -472,6 +476,7 @@ int64 FAT32FILE::read(unsigned char* buf, uint64 size)
     delete[] p;
     return size;
 }
+
 int64 FAT32FILE::read(unsigned char* buf, uint64 pos, uint64 size)
 {
     if (size == 0 && pos + size > table.size)
@@ -482,30 +487,39 @@ int64 FAT32FILE::read(unsigned char* buf, uint64 pos, uint64 size)
     if (pos + size > table.size)
     {
         size = table.size - pos;
-
     }
     uint64 start = pos / fat->Dbr.clus_size;
-    uint64 end = (pos + size) / fat->Dbr.clus_size + (pos + size) % fat->Dbr.clus_size ? 1 : 0;
+    uint64 end = (pos + size) / fat->Dbr.clus_size + (((pos + size) % fat->Dbr.clus_size) ? 1 : 0);
     uint64 rclus = clus;
-    unsigned char* p = new unsigned char[end - start];
+    kout << start << ' ' << end << endl;
+    unsigned char* p = new unsigned char[(end - start) * fat->Dbr.clus_size];
 
-
+    int i = 0;
+    while (i < start)
+    {
+        if (rclus < 2 || rclus >= 0xffffff7)
+            return -1;
+        rclus = fat->get_next_clus(rclus);
+        i++;
+    }
+    kout << i << endl;
     for (int i = 0; i < end - start; i++)
     {
         if (rclus < 2 || rclus >= 0xffffff7)
             return -1;
 
         fat->get_clus(rclus, &p[i * fat->Dbr.clus_size]);
+        // kout.memory(&p[i * fat->Dbr.clus_size], fat->Dbr.clus_size);
         rclus = fat->get_next_clus(rclus);
-
     }
+    kout[red] << "---------------------------------" << endl;
 
+    pos -= start * fat->Dbr.clus_size;
 
     for (int i = 0; i < size; i++)
     {
         buf[i] = p[pos + i];
     }
-
 
     delete[] p;
     return size;
@@ -574,6 +588,7 @@ bool FAT32::del_file(FAT32FILE* file)
 
     delete[] p;
 }
+
 bool FAT32FILE::write(unsigned char* src, uint64 size)
 {
     if (TYPE & 0x1)
@@ -605,7 +620,6 @@ bool FAT32FILE::write(unsigned char* src, uint64 size)
     }
 
     fat->set_clus(clus, src);
-
 
     rclus = clus;
 
@@ -654,14 +668,18 @@ void FAT32FILE::show()
 
 uint32 FAT32::get_next_clus(uint32 clus)
 {
+    uint32* temp = new uint32[Dbr.clus_size / 4];
+    // 
+    dev.read(FAT1lba + clus * 4 / sector_size, (unsigned char*)temp);
 
-    dev.read(FAT1lba + clus * 4 / sector_size, temp);
-    uint32* t = (uint32*)temp;
-    return t[clus % (sector_size / 4)];
+    uint32 t = temp[clus % (sector_size / 4)];
+    delete[] temp;
+    return t;
 }
 
 bool FAT32::set_next_clus(uint32 clus, uint32 nxt_clus)
 {
+    unsigned char* temp = new unsigned char[Dbr.clus_size];
     if (clus > Dbr.FAT_sector_num / Dbr.clus_sector_num)
     {
         return false;
@@ -670,6 +688,7 @@ bool FAT32::set_next_clus(uint32 clus, uint32 nxt_clus)
     dev.read(FAT1lba + clus * 4 / sector_size, temp);
     uint32* t = (uint32*)temp;
     t[clus % (sector_size / 4)] = nxt_clus;
+    delete[]temp;
 
     return true;
 }
@@ -687,6 +706,7 @@ bool FAT32::set_clus(uint64 clus, unsigned char* buf)
 
 FAT32::~FAT32()
 {
+    unsigned char* temp = new uint8[Dbr.clus_size];
     if (Dbr.FAT_num > 1)
     {
         for (int i = 0; i < Dbr.FAT_sector_num; i++) // 备份fat
@@ -784,11 +804,13 @@ FAT32FILE* FAT32::get_next_file(FAT32FILE* dir, FAT32FILE* cur, bool (*p)(FATtab
 
 bool FAT32::set_table(FAT32FILE* file)
 {
+    uint8* temp = new uint8[Dbr.clus_size];
     FATtable* ft;
     get_clus(file->table_clus_pos, temp);
     ft = (FATtable*)temp;
     memcpy(&ft[file->table_clus_off], (char*)&(file->table), 32);
     set_clus(file->table_clus_pos, temp);
+    delete[] temp;
 
     return true;
 }
@@ -797,6 +819,7 @@ bool ALLTURE(FATtable* t)
 {
     return true;
 }
+
 bool VALID(FATtable* t)
 {
     return t->attribute != 0xe5;

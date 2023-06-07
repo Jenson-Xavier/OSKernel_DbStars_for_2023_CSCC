@@ -116,17 +116,16 @@ class FAT32
     friend class VFSM;
 
 private:
-    DBR Dbr;
     uint64 DBRlba;
     uint64 FAT1lba;
     uint64 FAT2lba;
     uint64 DATAlba;
 
-    FAT32Device dev;
 
-    unsigned char* temp;
 
 public:
+    DBR Dbr;
+    FAT32Device dev;
     uint64 clus_to_lba(uint64 clus);
     uint64 lba_to_clus(uint64 lba);
     FAT32FILE* get_child_form_clus(char* child_name, uint64 src_lba); // 返回文件table

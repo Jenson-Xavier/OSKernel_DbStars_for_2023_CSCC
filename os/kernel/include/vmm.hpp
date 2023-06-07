@@ -166,7 +166,7 @@ protected:
 public:
     inline uint64 GetLength()
     {
-        return start - end;
+        return end - start;
     }
 
     inline uint64 GetStart()
@@ -263,7 +263,9 @@ public:
 #endif
     }
 
-    void create_from_vms(VMS* vms);         // 进程间的拷贝需要 新建一个vms但是内容拷贝至其他的vms
+    void create_from_vms(VMS* vms);         // 进程间的拷贝需要 新建一个vms但是内容拷贝至其他的vms.需确保VMS为新建
+    PAGETABLE * copy_PDT(PAGETABLE * pdt,int i);    //i为0表示在根节点
+
 
     void Enter();                           // 将当前空间切换到该实例所表示的空间
     void Leave();                           // 切换到内核空间

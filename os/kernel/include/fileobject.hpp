@@ -18,6 +18,9 @@
 #define STDOUT_FILENO   1
 #define STDERR_FILENO   2
 
+// 实现系统调用需要的特殊fd的宏
+#define AT_FDCWD -100
+
 // 标准输出对应的文件实例对象
 // 暂时设为空 后续找到再设置
 // 应该为串口文件格式 目前先如此保留
@@ -75,6 +78,7 @@ enum file_ptr
 struct file_object
 {
     int fd;                     // 小的非负整数表示文件描述符fd 这里使用int 考虑-1的可用性
+    int tk_fd;
     FAT32FILE* file;            // 对应的具体的打开的文件的结构指针
     uint64 pos_k;               // 进程对于每个打开的文件维护文件指针的当前位置信息 用于实现seek等操作
     uint64 flags;               // 进程对于每个打开的文件有一个如何访问这个文件的标志位信息 也可以是多位掩码的或

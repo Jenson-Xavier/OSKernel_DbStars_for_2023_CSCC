@@ -7,6 +7,7 @@
 #include <fileobject.hpp>
 
 // 定义idle进程
+proc_struct* null_proc = nullptr;
 proc_struct* idle_proc = nullptr;
 
 // 定义初始化立即调度与否的变量
@@ -118,10 +119,9 @@ int ProcessManager::get_unique_pid()
         }
         sptr = sptr->next;
     }
-    for (int i = 1;i <= MAX_PID;i++)
+    for (int i = 0;i <= MAX_PID;i++)
     {
-        // 直接从1号开始找
-        // 默认0号pid是分配给第0个idle boot进程
+        // 默认1号pid是分配给第1个idle boot进程
         if (st[i] == 0)
         {
             ret_pid = i;
@@ -157,6 +157,7 @@ proc_struct* ProcessManager::alloc_proc()
     proc->exit_value = 0;           // 只有在异常退出时才需要设置 大部分情况下均为0
     proc->flags = 0;                // 系统调用时需要 其他场景暂时不会使用
     proc->sem = nullptr;
+    proc->wait_ref = 0;
     proc->fo_head = nullptr;        // 文件对象 即常说的文件描述符表指针
     proc->cur_work_dir = nullptr;   // 类似heap属性 在进程管理初始化和创建部分不会觉得它的值 elf解析时会有相关设置
     memset(&(proc->context), 0, sizeof proc->context);
@@ -226,6 +227,7 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag, int flags)
         proc->sem->init();          // 初始化每个进程的信号量值设为0 wait系统调用的需要
         fom.init_proc_fo_head(proc);
         pm.init_proc_fds(proc);
+        pm.set_proc_cwd(proc, "");  // 防止引用空指针问题的出现
     }
     else
     {
@@ -247,6 +249,7 @@ bool ProcessManager::init_proc(proc_struct* proc, int ku_flag, int flags)
         proc->sem->init();
         fom.init_proc_fo_head(proc);
         pm.init_proc_fds(proc);
+        pm.set_proc_cwd(proc, "");
     }
     return true;
 }
@@ -291,10 +294,10 @@ bool ProcessManager::free_proc(proc_struct* proc)
     // 在检查资源的释放之前
     // 需要先检查当前需要被释放的进程是否有子进程
     // 如果存在子进程 让它们都成为孤儿进程
-    // 进而调度器逻辑保证能够回收它们
+    // 进而调度器逻辑保证能够回收它们KerneltoUserProcess
     // 不过在正确的执行逻辑下子进程一定会先被父进程回收 不会执行到这里
     proc_struct* child = nullptr;
-    for (child = cur_proc->fir_child;child != nullptr;child = child->bro_next)
+    for (child = proc->fir_child;child != nullptr;child = child->bro_next)
     {
         child->fa = nullptr;
     }
@@ -403,13 +406,11 @@ int ProcessManager::finish_proc(proc_struct* proc)
             // 这里就解除引用 退出地址空间
             // 并将指针指向置空
             proc->vms->unref();
-            proc->vms->Leave();
             proc->vms = nullptr;
         }
         else
         {
             // 可以调用destroy函数清空并释放相关资源了
-            proc->vms->Leave();
             proc->vms->destroy();
             proc->vms = nullptr;
         }
@@ -420,16 +421,21 @@ int ProcessManager::finish_proc(proc_struct* proc)
         // 对于每一个进程在创建并初始化它时信号量就被分配空间并且被初始化了
         // 因此这里是一定会执行到并且需要释放
         // 先释放信号量上的进程队列的空间
-        if (proc->sem->destroy())
-        {
-            // 只有队列空间被成功释放才可以
-            kfree(proc->sem);
-        }
-        else
-        {
-            kout[red] << "The Semaphore's queue is not Empty So the sem pointer cannot be freed!" << endl;
-            return -1;
-        }
+        // if (proc->sem->destroy())
+        // {
+        //     // 只有队列空间被成功释放才可以
+        //     kfree(proc->sem);
+        //     proc->sem = nullptr;
+        // }
+        // else
+        // {
+        //     kout[red] << "The Semaphore's queue is not Empty So the sem pointer cannot be freed!" << endl;
+        //     return -1;
+        // }
+
+        // bug
+        kfree(proc->sem);
+        proc->sem = nullptr;
     }
 
     if (proc->heap != nullptr)
@@ -454,6 +460,7 @@ int ProcessManager::finish_proc(proc_struct* proc)
     if (proc->cur_work_dir != nullptr)
     {
         kfree(proc->cur_work_dir);
+        proc->cur_work_dir = nullptr;
     }
 
     return 0;
@@ -529,6 +536,7 @@ void ProcessManager::user_proc_help_init(proc_struct* dst, proc_struct* src)
     dst->flags = src->flags;
     dst->sem = src->sem;
     src->sem = nullptr;                 // 手动初始化做迁移 将原进程的分配的sem指针给新进程并置空 防止回收时报错
+    dst->wait_ref = src->wait_ref;
     dst->heap = src->heap;
     src->heap = nullptr;
 
@@ -546,26 +554,29 @@ void ProcessManager::user_proc_help_init(proc_struct* dst, proc_struct* src)
     if (src->fa != nullptr)
     {
         dst->fa = src->fa;
+        src->fa = nullptr;
     }
     if (src->bro_pre != nullptr)
     {
         dst->bro_pre = src->bro_pre;
+        src->bro_pre = nullptr;
     }
     if (src->bro_next != nullptr)
     {
         dst->bro_next = src->bro_next;
+        src->bro_next = nullptr;
     }
     if (src->fir_child != nullptr)
     {
         dst->fir_child = src->fir_child;
+        src->fir_child = nullptr;
     }
 
     // vms的拷贝
     // 这里的拷贝就是新旧迁移 为了从特定函数启动的用户进程设置的
     // 而不是利用旧进程的信息创建一个新进程 两者各自的vms独立
     // 故可以利用引用并指向同一个vms地址
-    dst->vms = src->vms;
-    src->vms = nullptr;
+    pm.set_proc_vms(dst, src->vms);
 
     // 由于是新旧迁移
     // 名字也是一样的
@@ -584,6 +595,12 @@ void ProcessManager::user_proc_help_init(proc_struct* dst, proc_struct* src)
 
 void ProcessManager::copy_other_proc(proc_struct* dst, proc_struct* src)
 {
+    if (dst == nullptr || src == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+
     // 这里的copy部分与上面的迁移区别就在于是否初始化
     // 并且迁移基于本质上是同一个进程 而拷贝是两个独立的进程
     // 考虑fork和clone调用的需要 不过vms各自处理 故这里不处理
@@ -600,7 +617,7 @@ void ProcessManager::copy_other_proc(proc_struct* dst, proc_struct* src)
     // 只需要考虑父进程间的copy
     if (src->fa != nullptr)
     {
-        dst->fa = src->fa;
+        pm.set_proc_fa(dst, src->fa);
     }
 
     // 标志位信息 
@@ -747,9 +764,18 @@ bool ProcessManager::set_proc_cwd(proc_struct* proc, const char* cwd_path)
     return true;
 }
 
+void ProcessManager::init_nullproc_for_kernel()
+{
+    auto func = [](void*)->int
+    {
+        while (1);
+    };
+    null_proc = CreateKernelProcess(func, nullptr, "null_proc");
+}
+
 void ProcessManager::init_idleproc_for_boot()
 {
-    // 初始化0号boot进程 也可以认为是根进程
+    // 初始化1号boot进程 也可以认为是根进程
     // 相当于"继承"了我们的OS内核的运行
     idle_proc = alloc_proc();           // 给boot进程分配空间
     if (idle_proc == nullptr)
@@ -763,7 +789,7 @@ void ProcessManager::init_idleproc_for_boot()
     // 手动初始化
     idle_proc->ku_flag = 1;                         // 内核级进程
     idle_proc->stat = Proc_ready;                   // 初始化状态为就绪态
-    idle_proc->pid = 0;                             // 默认分配0号pid 特质idle进程
+    idle_proc->pid = 1;                             // 默认分配1号pid 特质idle进程 可以作为孤儿进程父进程
     idle_proc->fa = nullptr;                        // 根进程 永远不会存在父进程
     idle_proc->kstack = boot_stack;                 // 第0个进程 内核栈地址直接放在boot_stack位置
     idle_proc->kstacksize = boot_stack_top - boot_stack;
@@ -789,7 +815,9 @@ void ProcessManager::Init()
     need_imme_run_proc = nullptr;
     need_rest = false;
 
-    // PM类的初始化主要就是初始化出 idle 0号进程
+    // PM类的初始化主要就是初始化出 idle 1号进程
+    // 还有空转进程 这个进程是虚拟存在的 默认是0号进程
+    init_nullproc_for_kernel();
     init_idleproc_for_boot();
     cur_proc = idle_proc;                           // 别忘了设置cur_proc
 
@@ -1087,7 +1115,7 @@ bool ProcessManager::start_user_proc(proc_struct* proc, uint64 user_start_addr)
     uint64 SPP = 1 << 8;                                // 100000000
     proc->context->status = (read_csr(sstatus) | SPIE) & (~SPP) & (~SIE);
     proc->context->epc = user_start_addr;
-    uint64 user_sp = EmbedUserProcessStackAddr + EmbedUserProcessStackSize;
+    uint64 user_sp = EmbedUserProcessStackAddr + EmbedUserProcessStackSize - 4096;
     proc->context->reg.sp = user_sp;
     pm.switchstat_proc(proc, Proc_ready);
     return true;
@@ -1184,9 +1212,10 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
         {
             if (sptr->stat == Proc_finished || sptr->stat == Proc_zombie)
             {
-                if (sptr->fa != nullptr)
+                if (sptr->fa != nullptr && sptr->fa->pid != 0)
                 {
                     // 如果当前进程存在父进程的话
+                    // 并且父进程不为根进程
                     // 那么让父进程在它的逻辑里面去回收它
                     // 调度器不自动回收子进程
                     sptr = sptr->next;
@@ -1241,7 +1270,9 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
     }
 
     // 没有return 将前一半继续遍历一次
-    sptr = proc_listhead.next;
+    // 默认是从1号boot进程开始找
+    // 如果找不到再返回空转进程
+    sptr = idle_proc;
     while (sptr != cur_proc)
     {
         if (sptr->stat == Proc_ready)
@@ -1259,7 +1290,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
         {
             if (sptr->stat == Proc_finished || sptr->stat == Proc_zombie)
             {
-                if (sptr->fa != nullptr)
+                if (sptr->fa != nullptr && sptr->fa->pid != 1)
                 {
                     // 如果父进程被回收了
                     // 我们的逻辑就是让它的所有子进程成为孤儿
@@ -1319,6 +1350,12 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
     }
 
     // 还没有返回 就是没有可调度进程
+    // 调度空转进程
+    cur_proc = null_proc;
+    pm.switchstat_proc(cur_proc, Proc_running);
+    cur_proc->vms->Enter();
+    return cur_proc->context;
+
     kout[red] << "No Process to Schedule!" << endl;
     return nullptr;
 }
@@ -1449,16 +1486,58 @@ void ProcessManager::exit_proc(proc_struct* proc, int ec)
         pm.switchstat_proc(proc, Proc_finished);
     }
     proc->exit_value = ec;
-    proc->vms->Leave();
+    // proc->vms->Leave();
     // 如果当前进程有父进程
     // 那么出于wait的逻辑 当子进程被回收了应该可以让父进程signal
-    if (proc->fa != nullptr)
+    if (proc->fa != nullptr && proc->fa->pid != 0)
     {
         proc->fa->sem->signal();
     }
     // 这里可以触发立即调度进行回收 也可以在时钟中断RR调度下轮询回收
     // 立即回收理论上只有当调用函数的进程为当前执行的进程时会有明显效果
     pm.imme_trigger_schedule();
+}
+
+void ProcessManager::wait_ref_proc(proc_struct* proc)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+    proc->wait_ref++;
+}
+
+void ProcessManager::wait_unref_proc(proc_struct* proc)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return;
+    }
+    if (proc->wait_ref < 1)
+    {
+        proc->wait_ref = 0;
+    }
+    else
+    {
+        proc->wait_ref--;
+    }
+}
+
+bool ProcessManager::is_signal(proc_struct* proc)
+{
+    if (proc == nullptr)
+    {
+        kout[red] << "The Process has not existed!" << endl;
+        return false;
+    }
+
+    if (proc->wait_ref == 0)
+    {
+        return true;
+    }
+    return false;
 }
 
 bool ProcessManager::init_proc_fds(proc_struct* proc)
@@ -1482,7 +1561,6 @@ bool ProcessManager::init_proc_fds(proc_struct* proc)
     {
         kout[yellow] << "The Process init FD TABLE has other fds!" << endl;
         // 那么就先释放掉所有的再新建头节点
-        fom.free_all_flobj(proc->fo_head);
         fom.init_proc_fo_head(proc);
     }
 
@@ -1501,6 +1579,19 @@ bool ProcessManager::init_proc_fds(proc_struct* proc)
         fom.set_fo_flags(tmp_fo, O_WRONLY);
         tmp_fo = fom.create_flobj(cur_fo_head, STDERR_FILENO);          // 标准错误
         fom.set_fo_file(tmp_fo, STDIO);
+        fom.set_fo_flags(tmp_fo, O_WRONLY);
+    }
+    else
+    {
+        // 暂时如下trick
+        tmp_fo = fom.create_flobj(cur_fo_head, STDIN_FILENO);           // 标准输入
+        // fom.set_fo_file(tmp_fo, STDIO);
+        fom.set_fo_flags(tmp_fo, O_RDONLY);
+        tmp_fo = fom.create_flobj(cur_fo_head, STDOUT_FILENO);          // 标准输出
+        // fom.set_fo_file(tmp_fo, STDIO);
+        fom.set_fo_flags(tmp_fo, O_WRONLY);
+        tmp_fo = fom.create_flobj(cur_fo_head, STDERR_FILENO);          // 标准错误
+        // fom.set_fo_file(tmp_fo, STDIO);
         fom.set_fo_flags(tmp_fo, O_WRONLY);
     }
     return true;
@@ -1564,7 +1655,6 @@ bool ProcessManager::copy_proc_fds(proc_struct* dst, proc_struct* src)
     // 而且fo是进程的下层接口 文件系统是进程的上层接口
     // 因此进程只要按照它需要的逻辑任意操作fo即可 不需要考虑文件系统的组织问题
     fom.free_all_flobj(dst->fo_head);
-    fom.init_proc_fo_head(dst);
     file_object* dst_fo_head = dst->fo_head;
     file_object* dst_fo_ptr = dst_fo_head;
     file_object* src_fo_ptr = nullptr;

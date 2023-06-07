@@ -5,6 +5,12 @@
 #include <process.hpp>
 #include <memory.hpp>
 #include <syscall.hpp>
+#include <Disk.hpp>
+
+extern "C"
+{
+#include <_plic.h>
+}
 
 // 中断名字数组 便于打印调试
 static const char* trap_intr_code_name[16] =
@@ -108,6 +114,7 @@ extern "C"
                 {
                     // kout[green] << imme_schedule << endl;
                     // kout[yellow] << "cur_proc's pid is : " << pm.get_cur_proc()->pid << endl;
+                    // kout[yellow] << "cur_proc's epc is : " << Hex(tf->epc) << endl;
                     // kout[yellow] << "cur_proc's name is " << pm.get_cur_proc()->name << endl;
                     // kout[yellow] << "cur proc cnt is : " << pm.get_proc_count() << endl;
                     // 每100个时钟周期进行一次进程RR调度
@@ -129,7 +136,35 @@ extern "C"
             case IRQ_U_EXT:
                 break;
             case IRQ_S_EXT:
+            {
+                int irq = plic_claim();
+                // kout[Debug]<<"irq "<<irq<<endl;
+                switch (irq)
+                {
+                case 0:
+                    break;
+                case UART_IRQ:
+                    //...
+                    break;
+                case DISK_IRQ:
+                {
+                    bool err = DiskInterruptSolve();
+                    // kout[green]<<"DiskInterruptSolve"<<endl;
+                    if (!err)
+                        kout[red] << "error DiskInterruptSolve" << endl;
+                    break;
+                }
+                default:
+                    kout[red] << "irq error" << endl;
+                }
+                if (irq)
+                    plic_complete(irq);
+                //				#ifndef QEMU//??
+                //				w_sip(r_sip()&~2);    // clear pending bit
+                //				sbi_set_mie();
+                //				#endif
                 break;
+            }
             case IRQ_H_EXT:
                 break;
             case IRQ_M_EXT:
@@ -145,6 +180,7 @@ extern "C"
             case CAUSE_FETCH_ACCESS:
             case CAUSE_ILLEGAL_INSTRUCTION:
                 trap_fail_info(tf);
+                pm.exit_proc(pm.get_cur_proc(), -1);
                 break;
             case CAUSE_BREAKPOINT:
                 switch (tf->reg.a7)

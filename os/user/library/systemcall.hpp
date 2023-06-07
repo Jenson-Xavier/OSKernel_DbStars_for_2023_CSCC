@@ -47,6 +47,7 @@ inline int clone(int (*fn)(void), void* arg, void* stack, int stack_size, unsign
 inline int waitpid(int pid, int* wstatus, int options)
 {
     int ret = syscall(Sys_wait4, pid, (uint64)wstatus, options);
+    u_putchar('T');
     return ret;
 }
 
@@ -116,5 +117,9 @@ inline int64 get_time()
     }
 }
 
+inline int execve(const char *name, char *const argv[], char *const argp[])
+{
+    return syscall(Sys_execve, (uint64)name, (uint64)argv, (uint64)argp);
+}
 
 #endif

@@ -108,12 +108,15 @@ struct proc_struct
     int flags;                  // 后续系统调用需要 进程的标志
 
     SEMAPHORE* sem;             // 每个进程设计一个信号量指针(类的例化问题) 用于初步IPC和wait系统调用
- 
+    uint64 wait_ref;            // 当一个进程被多个信号量阻塞时 需要引用计数
+    
     file_object* fo_head;       // 维护的是进程打开的文件 即文件描述符表的结构 使用链表和虚拟头节点的技术
     char* cur_work_dir;         // 当前工作目录 与文件系统相关联 实现系统调用的需要
 };
 
-// 声明全局 OS第0个进程idle_proc
+// 声明全局 OS第1个进程idle_proc
+// OS第0个进程是空转进程 执行while空转的内核线程
+extern struct proc_struct* null_proc;
 extern struct proc_struct* idle_proc;
 
 // 声明一个立即调度的bool变量 用来触发立即调度实现同步原语或进程调度 即阻塞或者立即执行的功能
@@ -129,7 +132,8 @@ protected:
     uint32 proc_count;                              // 存在的进程数量
     void add_proc_tolist(proc_struct* proc);        // 将分配好的进程加入进程链表
     bool remove_proc_fromlist(proc_struct* proc);   // 将已经加入进程链表的进程移除
-    void init_idleproc_for_boot();                  // 创建并初始化第0个idle进程 相当于boot进程
+    void init_nullproc_for_kernel();                // 创建一个0号空转进程
+    void init_idleproc_for_boot();                  // 创建并初始化第1个idle进程 相当于boot进程
     int finish_proc(proc_struct* proc);             // 结束一个进程 释放其所属的资源 这里最好有对应的退出码设置
     bool need_rest;                                 // 标记是否需要休息当前的进程 调度使用
 
@@ -177,7 +181,10 @@ public:
     void rest_proc(proc_struct* proc);                                      // 暂停一个进程
     void kill_proc(proc_struct* proc);                                      // 杀死一个进程
     void exit_proc(proc_struct* proc, int ec);                              // 进程退出函数
-
+    void wait_ref_proc(proc_struct* proc);                                  // 增加wait的引用计数
+    void wait_unref_proc(proc_struct* proc);                                // 减少wait的引用计数
+    bool is_signal(proc_struct* proc);                                      // 判断引用计数是否可以唤醒
+    
     // 设置进程的属性相关
     bool set_proc_name(proc_struct* proc, char* name);                      // 设置一个进程的名称
     bool set_proc_kstk(proc_struct* proc, void* kaddr, uint32 size);        // 设置进程内核栈
@@ -185,7 +192,7 @@ public:
     bool set_proc_heap(proc_struct* proc, HMR* hmr);                        // 设置进程的HMR属性
     bool set_proc_fa(proc_struct* proc, proc_struct* fa_proc);              // 设置进程的父进程
     bool set_proc_cwd(proc_struct* proc, const char* cwd_path);             // 设置进程的当前工作目录
-    
+
     // 进程运行时态相关
     clock_t get_proc_rumtime(proc_struct* proc, bool need_update);          // 获取进程的运行时间(是否需要更新)
     clock_t get_proc_systime(proc_struct* proc, bool need_update);          // 获取用户进程的系统调用核心态时间(是否需要更新)

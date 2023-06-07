@@ -61,7 +61,7 @@ int FileObjectManager::find_sui_fd(file_object* fo_head)
     }
 
     int cur_len = get_count_fdt(fo_head);
-    int st[cur_len + 3 + 1];                    // 当前有这么多节点 使用cur_len+1个数一定可以找到合适的fd
+    int st[cur_len + 3 + 1];                // 当前有这么多节点 使用cur_len+1个数一定可以找到合适的fd
     memset(st, 0, sizeof(st));
     st[0] = 1;                              // 标准输出的fd是默认分配好的 不应该被占用
     st[1] = 1;

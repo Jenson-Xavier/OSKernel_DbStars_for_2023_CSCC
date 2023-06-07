@@ -8,6 +8,7 @@ Build/Kernel/interrupt.elf Build/Kernel/pmm.elf Build/Kernel/vmm.elf Build/Kerne
 Build/Kernel/syscall.elf Build/Kernel/Process_S.elf Build/Kernel/spinlock.elf Build/Kernel/mutex.elf \
 Build/Kernel/semaphore.elf Build/Kernel/pathtool.elf Build/Kernel/ramdisk_driver.elf \
 Build/Kernel/FAT32.elf  Build/Kernel/fileobject.elf Build/Kernel/vfsm.elf Build/Kernel/parseELF.elf \
+Build/Kernel/DriverTool.elf Build/Kernel/_plic.elf Build/Kernel/virtio_disk.elf\
 #Build/Kernel/vfs.elf Build/Kernel/fat32.elf
 	riscv64-unknown-elf-ld -o Build/Kernel/kernel.elf -T Linker/linker.ld \
 	Build/Kernel/main.elf \
@@ -22,6 +23,9 @@ Build/Kernel/FAT32.elf  Build/Kernel/fileobject.elf Build/Kernel/vfsm.elf Build/
 	Build/Kernel/pmm.elf \
 	Build/Kernel/vmm.elf \
 	Build/Kernel/ramdisk_driver.elf \
+	Build/Kernel/DriverTool.elf \
+	Build/Kernel/_plic.elf \
+	Build/Kernel/virtio_disk.elf \
 	Build/Kernel/FAT32.elf \
 	Build/Kernel/vfsm.elf \
 	Build/Kernel/fileobject.elf \
@@ -109,6 +113,15 @@ Build/Kernel/FAT32.elf:kernel/file/FAT32.cpp
 Build/Kernel/ramdisk_driver.elf:kernel/driver/ramdisk_driver.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/driver/ramdisk_driver.cpp -o Build/Kernel/ramdisk_driver.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
 
+Build/Kernel/virtio_disk.elf:kernel/driver/virtio_disk.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/driver/virtio_disk.cpp -o Build/Kernel/virtio_disk.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
+Build/Kernel/DriverTool.elf:kernel/driver/DriverTool.cpp
+	riscv64-unknown-elf-g++ -nostdlib -c kernel/driver/DriverTool.cpp -o Build/Kernel/DriverTool.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
+Build/Kernel/_plic.elf:kernel/driver/_plic.c
+	riscv64-unknown-elf-gcc -nostdlib -c kernel/driver/_plic.c -o Build/Kernel/_plic.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
+
 #synchronize
 Build/Kernel/spinlock.elf:kernel/synchronize/spinlock.cpp
 	riscv64-unknown-elf-g++ -nostdlib -c kernel/synchronize/spinlock.cpp -o Build/Kernel/spinlock.elf -I"kernel/include" -mcmodel=medany -fno-exceptions -fno-rtti
@@ -159,4 +172,5 @@ clean1:
 
 qemu:
 	cp img/udisk.img Build/udisk.img
-	qemu-system-riscv64 -machine virt -m 256M -nographic -bios SBI/opensbi-qemu.elf -kernel Build/Kernel/kernel.elf -initrd Build/udisk.img
+# qemu-system-riscv64 -machine virt -m 256M -nographic -bios SBI/opensbi-qemu.elf -kernel Build/Kernel/kernel.elf -initrd Build/udisk.img
+	qemu-system-riscv64 -machine virt -kernel Build/Kernel/kernel.elf -m 128M -nographic -smp 2 -bios SBI/opensbi-qemu.elf -drive file=Build/udisk.img,if=none,format=raw,id=x0  -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 

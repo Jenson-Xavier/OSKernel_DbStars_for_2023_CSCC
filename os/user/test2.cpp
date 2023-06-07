@@ -54,26 +54,28 @@ void test_clone(void) {
     {
         u_puts("Father Thread is Waiting......\n");
         int pid = getpid();
-        u_puts((int64)pid);
-        if (wait(&wstatus) == child_pid)
-        {
-            u_puts("This is the Father Thread!\n");
-            u_puts("The Child Thread's pid is ");
-            u_puts((int64)child_pid);
-            u_puts("Child Thread exit wstatus is ");
-            u_puts((int64)wstatus);
-            u_puts("FATHER TIME::\n");
-            int test_ret = times(&mytimes);
-            u_puts((int64)test_ret);
-            u_puts((int64)mytimes.tms_utime);
-            u_puts((int64)mytimes.tms_stime);
-            u_puts((int64)mytimes.tms_cutime);
-            u_puts((int64)mytimes.tms_cstime);
-        }
-        else
-        {
-            u_puts("Wait Error!\n");
-        }
+        u_puts((int64)pid);;
+        wait(&wstatus);
+        u_puts("YYYTTT");
+        // if (wait(&wstatus) == child_pid)
+        // {
+        //     u_puts("This is the Father Thread!\n");
+        //     // u_puts("The Child Thread's pid is ");
+        //     // u_puts((int64)child_pid);
+        //     // u_puts("Child Thread exit wstatus is ");
+        //     // u_puts((int64)wstatus);
+        //     // u_puts("FATHER TIME::\n");
+        //     // int test_ret = times(&mytimes);
+        //     // u_puts((int64)test_ret);
+        //     // u_puts((int64)mytimes.tms_utime);
+        //     // u_puts((int64)mytimes.tms_stime);
+        //     // u_puts((int64)mytimes.tms_cutime);
+        //     // u_puts((int64)mytimes.tms_cstime);
+        // }
+        // else
+        // {
+        //     u_puts("Wait Error!\n");
+        // }
     }
 }
 
@@ -138,12 +140,21 @@ void test_sleep()
     }
 }
 
+void test_execve(void)
+{
+    char* newargv[] = { "test_echo", nullptr };
+    char* newenviron[] = { nullptr };
+    execve("/test_echo", newargv, newenviron);
+}
+
 int main(void) {
-    // test_clone();
+    test_clone();
     // test_getpid();
     // test_getppid();
     // test_times();
     // test_uname();
-    test_sleep();
+    // test_sleep();
+    // test_execve();
+    
     return 0;
 }

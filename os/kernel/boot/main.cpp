@@ -11,6 +11,7 @@
 #include <fileobject.hpp>
 #include <vfsm.hpp>
 #include <FAT32.hpp>
+#include <Disk.hpp>
 #include <parseELF.hpp>
 #include <ramdisk_driver.hpp>
 
@@ -456,32 +457,32 @@ void test_fo_list()
 
 void test_filevfsm()
 {
-    kout[blue] << (uint64)sizeof(FATtable) << endl;
-    FATtable p;
-    FAT32FILE* t;
+    // kout[blue] << (uint64)sizeof(FATtable) << endl;
+    // FATtable p;
+    // FAT32FILE* t;
 
-    char* buf;
+    // char* buf;
 
-    buf = new char[100];
-    char* txt;
-    txt = new char[100];
-    strcpy(txt, "abcdefg");
+    // buf = new char[100];
+    // char* txt;
+    // txt = new char[100];
+    // strcpy(txt, "abcdefg");
 
-    // vfsm.create_file("/", "/", "fuck.txt", FATtable::FILE);
-    // t = vfsm.open("/fuck.txt", "/");
-    // t->show();
-    // t->write((unsigned char *)"fuckfuck", 10);
-    // // kout<<"error"<<endl;
-    // t->show();
-    // t->read((unsigned char *)buf, 10);
-    // kout[green] << buf << endl;
-    // vfsm.close(t);
-    buf = new char[100];
-    vfsm.create_file("/mnt", "/", "ff");
-    t = vfsm.open("/mnt/ff", "/");
-    t->write((uint8*)txt, 7);
-    t->read((uint8*)buf, 2, 3);
-    kout[red] << buf << endl;
+    // // vfsm.create_file("/", "/", "fuck.txt", FATtable::FILE);
+    // // t = vfsm.open("/fuck.txt", "/");
+    // // t->show();
+    // // t->write((unsigned char *)"fuckfuck", 10);
+    // // // kout<<"error"<<endl;
+    // // t->show();
+    // // t->read((unsigned char *)buf, 10);
+    // // kout[green] << buf << endl;
+    // // vfsm.close(t);
+    // buf = new char[100];
+    // vfsm.create_file("/mnt", "/", "ff");
+    // t = vfsm.open("/mnt/ff", "/");
+    // t->write((uint8*)txt, 7);
+    // t->read((uint8*)buf, 2, 3);
+    // kout[red] << buf << endl;
     // t->show();
 
     // FAT32FILE *o;
@@ -536,20 +537,98 @@ void test_filevfsm()
     // fat.read(t,(unsigned char *)buf,10);
     // kout<<buf;
 
-    delete[] buf;
+    // delete[] buf;
 
     // test_fat32device_driver();
     // test_memory();
     // test_user_img_process();
-    // vfsm.Init();    
+    // vfsm.Init();
+
+    FATtable p;
+    FAT32FILE* t;
+
+    char* buf;
+
+    buf = new char[8000];
+    char* txt;
+    txt = new char[100];
+    strcpy(txt, "abcdefg");
+
+    t = vfsm.open("/text.txt", "/");
+    // kout[yellow]<<"test"<<endl;
+    t->show();
+
+    t->read((uint8*)buf, t->table.size);
+    kout << buf;
+    // t->show();
+
+    delete[] buf;
 }
 
 void test_elfparse()
 {
+    // vfsm.create_dir("/", "/", "test_mkdir");
+    // FAT32FILE* ft = vfsm.open("/mnt", "/");
+    // ft->show();
+
     file_object* fo = (file_object*)kmalloc(sizeof(file_object));
     FAT32FILE* file = vfsm.open("/brk", ".");
+
+    // unsigned char rd[10000];
+    // file->read(rd, 4096, 4096);
+    // for (int i = 0;i < 4096;i++)
+    // {
+    //     kout << i << ": " << Hex((uint8)rd[i]) << endl;
+    // }
     fom.set_fo_file(fo, file);
     CreateProcessFromELF(fo, "/");
+}
+
+void test_VirtIO()
+{
+    for (int i = 0; i < 0x300000; i += 512)
+    {
+        kout[cyan] << i << endl;
+        Sector sec;
+        DiskReadSector(i / 512, &sec, 1);
+        KOUT::memory(&sec, sizeof(sec));
+        break;
+    }
+    for (int i = 0x4000; i < 0x300000; i += 512)
+    {
+        kout[cyan] << i << endl;
+        Sector sec;
+        DiskReadSector(i / 512, &sec, 1);
+        KOUT::memory(&sec, sizeof(sec));
+        break;
+    }
+    while (1)
+        ;
+}
+
+void test_filedriver()
+{
+    // VMS::GetKernelVMS()->show();
+    // char * a=(char *)0xffffffff82000000;
+    // kout.memory(a,32);
+
+    // test_VirtIO();
+    // test_filevfsm();
+
+    // kout[red]<<re<<endl;
+    // kout.memory(t,100);
+    // kout[green]<<vfsm.get_root()->fat->clus_to_lba(2);
+
+    // kout[red]<<vfsm.get_root()->fat->get_next_clus(2)<<endl;
+    // kout.memory(t,100);
+    // kout.memory(t,100);
+    // for (int i = 0; i < 10; i++)
+    // {
+    // kout<<t[i]<<' ';
+    // }
+
+    // kout[red] << "SDSD" << endl;
+    // test_filevfsm();
 }
 
 int main()
@@ -569,10 +648,9 @@ int main()
     pmm.Init();
     VMS::Static_Init();
     pm.Init();
-    vfsm.init();
     
-    // test_more_user_img_process();
-    // test_filevfsm();
+    DiskInit();
+    vfsm.init();
 
     test_elfparse();
 
