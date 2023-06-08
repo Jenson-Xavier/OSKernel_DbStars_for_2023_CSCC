@@ -1,14 +1,15 @@
 #include <vmm.hpp>
+#include <clock.hpp>
 
-VMS *VMS::KernelVMS = nullptr;
-VMS *VMS::CurVMS = nullptr;
+VMS* VMS::KernelVMS = nullptr;
+VMS* VMS::CurVMS = nullptr;
 
 bool PAGETABLE::Init(bool isRoot)
 {
     if (isRoot)
     {
         memset(entries, uint8(0), sizeof(ENTRY) * ENTRYCOUNT);
-        memcpy(&entries[ENTRYCOUNT - 4], (char *)((ENTRY *)&boot_sv39_page_table[ENTRYCOUNT - 4]), sizeof(ENTRY) * 4);
+        memcpy(&entries[ENTRYCOUNT - 4], (char*)((ENTRY*)&boot_sv39_page_table[ENTRYCOUNT - 4]), sizeof(ENTRY) * 4);
     }
     else
     {
@@ -20,7 +21,7 @@ bool PAGETABLE::Init(bool isRoot)
 bool PAGETABLE::Destroy()
 {
 
-    if (this == (void *)boot_sv39_page_table)
+    if (this == (void*)boot_sv39_page_table)
     {
         kout[red] << "can't Destroy Kernel PageTable" << endl;
         return false;
@@ -66,6 +67,7 @@ void PAGETABLE::show()
             }
             else
             {
+                kout[purple] << Hex((uint64)entries[i].get_next_page()) << endl;
                 entries[i].get_next_page()->show();
             }
         }
@@ -108,14 +110,14 @@ bool VMS::init()
     Head = nullptr;
     VMRCount = 0;
 
-    PDT = (PAGETABLE *)pmm.malloc(4096);
+    PDT = (PAGETABLE*)pmm.malloc(4096);
     PDT->Init(1);
 
     ShareCount = 0;
     return true;
 }
 
-void VMS::insert(VMR *tar)
+void VMS::insert(VMR* tar)
 {
     // kout[green] << "success to insert" << endl;
     tar->pre = nullptr;
@@ -127,10 +129,10 @@ void VMS::insert(VMR *tar)
     Head = tar;
 }
 
-VMR *VMS::insert(uint64 start, uint64 end, uint32 flag)
+VMR* VMS::insert(uint64 start, uint64 end, uint32 flag)
 {
     // ... 需要进行对齐
-    VMR *tar = (VMR *)pmm.malloc(sizeof(VMR));
+    VMR* tar = (VMR*)pmm.malloc(sizeof(VMR));
     tar->start = start;
     tar->end = end;
     tar->flag.flag = flag;
@@ -155,9 +157,9 @@ void VMS::Enter()
     // kout[yellow] << "Enter VMS" << endl;
 }
 
-bool VMS::del(bool (*p)(VMR *tar))
+bool VMS::del(bool (*p)(VMR* tar))
 {
-    VMR *t, *t1;
+    VMR* t, * t1;
     while (Head != nullptr && p(Head))
     {
         t = Head;
@@ -192,7 +194,7 @@ bool VMS::del(bool (*p)(VMR *tar))
     return true;
 }
 
-bool VMS::del(VMR *tar)
+bool VMS::del(VMR* tar)
 {
     if (tar->pre == nullptr && tar->next == nullptr)
     {
@@ -206,9 +208,9 @@ bool VMS::del(VMR *tar)
     return false;
 }
 
-VMR *VMS::find(void *addr)
+VMR* VMS::find(void* addr)
 {
-    VMR *t = Head;
+    VMR* t = Head;
     while (t != nullptr)
     {
         if (t->GetStart() <= (uint64)addr && t->GetEnd() > (uint64)addr)
@@ -230,22 +232,22 @@ void VMS::unref()
 
 bool VMS::Static_Init()
 {
-    KernelVMS = (VMS *)pmm.malloc(sizeof(VMS));
+    KernelVMS = (VMS*)pmm.malloc(sizeof(VMS));
     if (KernelVMS == nullptr)
     {
         kout[red] << "failed to malloc Kernel VMS" << endl;
         return false;
     }
 
-    KernelVMS->PDT = (PAGETABLE *)boot_sv39_page_table;
+    KernelVMS->PDT = (PAGETABLE*)boot_sv39_page_table;
     KernelVMS->VMRCount = 1;
 
-    KernelVMS->Head = (VMR *)pmm.malloc(sizeof(VMR));
+    KernelVMS->Head = (VMR*)pmm.malloc(sizeof(VMR));
     KernelVMS->Head->Init(0xffffffff00000000, 0xffffffffc0000000, 39);
     KernelVMS->insert(PhysiclaVirtualMemoryOffset, PhysiclaVirtualMemoryOffset + 0xc0000000, 163);
 
     KernelVMS->ShareCount = 1;
-    kout[blue] << "VirtualMemorySpace for Kernel init Success!" << endl;
+    // kout[blue] << "VirtualMemorySpace for Kernel init Success!" << endl;
     return true;
 }
 
@@ -260,7 +262,7 @@ bool VMS::clear()
     {
         if (Head != nullptr)
         {
-            VMR *t;
+            VMR* t;
             while (Head->next)
             {
                 t = Head->next;
@@ -289,7 +291,7 @@ bool VMS::destroy()
     return true;
 }
 
-void VMS::create_from_vms(VMS *vms)
+void VMS::create_from_vms(VMS* vms) // 只能用于用户空间的复制，对内核空间不起作用
 {
     // 复制VMR
     if (Head != nullptr)
@@ -298,7 +300,7 @@ void VMS::create_from_vms(VMS *vms)
         return;
     }
 
-    VMR *t = vms->Head;
+    VMR* t = vms->Head;
     while (t)
     {
         this->insert(t->start, t->end, t->flag.flag);
@@ -308,33 +310,42 @@ void VMS::create_from_vms(VMS *vms)
     VMRCount = vms->VMRCount;
     ShareCount = vms->ShareCount;
 
+    // show();
     // 复制PDT
-    PDT = copy_PDT(vms->PDT, 0);
+
+    pmm.free(PDT);
+    PDT = copy_PDT(vms->PDT, ENTRYCOUNT - 5);
+    memcpy((void*)(((uint64)PDT) + 508 * sizeof(ENTRY)), (char*)((ENTRY*)&boot_sv39_page_table[ENTRYCOUNT - 4]), sizeof(ENTRY) * 4);
+
 }
-
-PAGETABLE *VMS::copy_PDT(PAGETABLE *pdt, int i)
+PAGETABLE* VMS::copy_PDT(PAGETABLE* src, int32 end)
 {
-    if (!i)
+
+    PAGETABLE* re = (PAGETABLE*)pmm.malloc(4096);
+    if (end == 0)
     {
-        pmm.free(PDT);
+        memcpy(re, (char*)src, PAGESIZE);
+        return re;
     }
+    else
+        memset(re, 0, 4096);
 
-    if (i == 3)
+    for (int i = 0; i < end; i++)
     {
-        PAGETABLE *t = (PAGETABLE *)pmm.malloc(PAGESIZE);
-        memcpy(t, (char *)pdt, PAGESIZE);
-        return t;
-    }
-
-    PAGETABLE *re = (PAGETABLE *)pmm.malloc(PAGESIZE);
-    PAGETABLE *t;
-
-    for (int i = 0; i < ENTRYCOUNT; i++)
-    {
-        if (pdt->getEntry(i).V)
+        // kout << Hex((uint64)src) << ' ' << src->getEntry(i).V << endl;
+        // delay(10000);
+        if (src->getEntry(i).V)
         {
-            t = copy_PDT(pdt->getEntry(i).get_next_page(), i + 1);
-            re->getEntry(i).set_PNN(t);
+
+            PAGETABLE* t;
+            if (src->getEntry(i).is_leaf())
+                t = copy_PDT((PAGETABLE*)src->getEntry(i).get_ref_page(), 0);
+            else
+                t = copy_PDT(src->getEntry(i).get_next_page(), ENTRYCOUNT);
+
+            re->getEntry(i).page_table_entry |= src->getEntry(i).page_table_entry & 0x3ff;
+            // kout<<K2PAddr(t);
+            re->getEntry(i).set_PNN(K2PAddr(t));
         }
     }
     return re;
@@ -342,7 +353,7 @@ PAGETABLE *VMS::copy_PDT(PAGETABLE *pdt, int i)
 
 void VMS::show()
 {
-    VMR *t = Head;
+    VMR* t = Head;
     while (t)
     {
         kout[blue] << "start :" << KOUT::hex(t->GetStart()) << endl;
@@ -353,21 +364,21 @@ void VMS::show()
     kout << endl;
 }
 
-bool VMS::SolvePageFault(TRAPFRAME *tf)
+bool VMS::SolvePageFault(TRAPFRAME* tf)
 {
-    VMR *t = find((void *)(tf->badvaddr));
+    VMR* t = find((void*)(tf->badvaddr));
     if (t == nullptr)
     {
-        kout[red] << "Invalid Addr : ";
-        kout[red] << Hex(tf->badvaddr) << endl;
+        // kout[red] << "Invalid Addr : ";
+        // kout[red] << Hex(tf->badvaddr) << endl;
         return false;
     }
 
-    ENTRY &e2 = PDT->getEntry(((tf->badvaddr >> 12) >> (9 * 2)) & 511);
-    PAGETABLE *p;
+    ENTRY& e2 = PDT->getEntry(((tf->badvaddr >> 12) >> (9 * 2)) & 511);
+    PAGETABLE* p;
     if (!e2.V)
     {
-        p = (PAGETABLE *)pmm.malloc(4096);
+        p = (PAGETABLE*)pmm.malloc(4096);
         p->Init();
         e2.set_PNN(p->PAddr());
         // kout[yellow] << KOUT::hex(e2.get_PNN()) << endl;
@@ -378,10 +389,10 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
     }
     p = e2.get_next_page();
 
-    ENTRY &e1 = p->getEntry(((tf->badvaddr >> 12) >> (9 * 1)) & 511);
+    ENTRY& e1 = p->getEntry(((tf->badvaddr >> 12) >> (9 * 1)) & 511);
     if (!e1.V)
     {
-        p = (PAGETABLE *)pmm.malloc(4096);
+        p = (PAGETABLE*)pmm.malloc(4096);
         p->Init();
         e1.set_PNN(p->PAddr());
         e1.V = 1;
@@ -391,21 +402,25 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
     }
     p = e1.get_next_page();
 
-    ENTRY &e0 = p->getEntry((tf->badvaddr >> 12) & 511);
+    ENTRY& e0 = p->getEntry((tf->badvaddr >> 12) & 511);
     // kout.memory(&e0, 8);
     // kout[yellow] << (uint64)p << endl;
     if (!e0.V)
     {
-        p = (PAGETABLE *)pmm.malloc(4096);
+        p = (PAGETABLE*)pmm.malloc(4096);
         e0.set_PNN(p->PAddr());
         e0.V = 1;
         e0.W = t->flag.Write;
         e0.R = t->flag.Read;
         e0.X = t->flag.Exec;
-        if (t->flag.Kernel)
-            e0.U = 0;
+        if (t->flag.Kernel == 1)
+        {
+            e0.G = 1;
+        }
         else
-            e0.U = 1; // 用户页面需要增加用户标志位
+        {
+            e0.U = 1;
+        }
     }
     else
     {
@@ -417,27 +432,27 @@ bool VMS::SolvePageFault(TRAPFRAME *tf)
     return true;
 }
 
-bool trap_PageFault(TRAPFRAME *tf)
+bool trap_PageFault(TRAPFRAME* tf)
 {
     return VMS::GetCurVMS()->SolvePageFault(tf);
 }
 
-void *operator new(size_t size)
+void* operator new(size_t size)
 {
     return pmm.malloc(size);
 }
 
-void *operator new[](size_t size)
+void* operator new[](size_t size)
 {
     return pmm.malloc(size);
 }
 
-void operator delete(void *p, size_t size)
+void operator delete(void* p, size_t size)
 {
     pmm.free(p);
 }
 
-void operator delete[](void *p)
+void operator delete[](void* p)
 {
     pmm.free(p);
 }

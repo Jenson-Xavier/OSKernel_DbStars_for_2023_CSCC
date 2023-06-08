@@ -161,7 +161,7 @@ int SEMAPHORE::wait(proc_struct* proc)
     return value;
 }
 
-void SEMAPHORE::signal()
+void SEMAPHORE::signal(proc_struct* proc)
 {
     bool intr_flag;
     intr_save(intr_flag);

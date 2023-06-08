@@ -98,6 +98,8 @@ public:
     uint64 ref;
     char* path;
 
+
+
     FAT32FILE(FATtable tb, char* lName, uint64 _clus = 0, uint64 pos = 0, char* path = nullptr);
     ~FAT32FILE();
     bool set_path(char* _path);
@@ -106,6 +108,7 @@ public:
     int64 read(unsigned char* buf, uint64 pos, uint64 size);
     bool write(unsigned char* src, uint64 size);
     bool write(unsigned char* src, uint64 pos, uint64 size);
+
 
     void show();
 };
@@ -148,7 +151,7 @@ public:
     FAT32FILE* open(char* path);
     bool close(FAT32FILE* p);
     bool link();
-    bool unlink();
+    bool unlink(FAT32FILE* file);
     FAT32FILE* create_file(FAT32FILE* dir, char* fileName, uint8 type = FATtable::FILE);
     FAT32FILE* create_dir(FAT32FILE* dir, char* fileName);
     bool del_file(FAT32FILE* file);                                                                        // 可用于删除文件夹

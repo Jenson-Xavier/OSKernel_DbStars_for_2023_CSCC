@@ -101,7 +101,7 @@ struct proc_struct
 
     VMS* vms;                   // 虚拟内存关键VMS指针 管理虚存和物存空间
     HMR* heap;                  // 用户进程的数据段/堆段指针 brk系统调用的需要
-    
+
     char name[PROC_NAME_LEN];   // 进程名称
 
     int exit_value;             // 后续系统调用需要 退出状态值(具体使用场景暂无)
@@ -109,14 +109,12 @@ struct proc_struct
 
     SEMAPHORE* sem;             // 每个进程设计一个信号量指针(类的例化问题) 用于初步IPC和wait系统调用
     uint64 wait_ref;            // 当一个进程被多个信号量阻塞时 需要引用计数
-    
+
     file_object* fo_head;       // 维护的是进程打开的文件 即文件描述符表的结构 使用链表和虚拟头节点的技术
     char* cur_work_dir;         // 当前工作目录 与文件系统相关联 实现系统调用的需要
 };
 
-// 声明全局 OS第1个进程idle_proc
-// OS第0个进程是空转进程 执行while空转的内核线程
-extern struct proc_struct* null_proc;
+// 声明全局 OS第0个进程idle_proc
 extern struct proc_struct* idle_proc;
 
 // 声明一个立即调度的bool变量 用来触发立即调度实现同步原语或进程调度 即阻塞或者立即执行的功能
@@ -132,8 +130,7 @@ protected:
     uint32 proc_count;                              // 存在的进程数量
     void add_proc_tolist(proc_struct* proc);        // 将分配好的进程加入进程链表
     bool remove_proc_fromlist(proc_struct* proc);   // 将已经加入进程链表的进程移除
-    void init_nullproc_for_kernel();                // 创建一个0号空转进程
-    void init_idleproc_for_boot();                  // 创建并初始化第1个idle进程 相当于boot进程
+    void init_idleproc_for_boot();                  // 创建并初始化第0个idle进程 相当于boot进程
     int finish_proc(proc_struct* proc);             // 结束一个进程 释放其所属的资源 这里最好有对应的退出码设置
     bool need_rest;                                 // 标记是否需要休息当前的进程 调度使用
 
@@ -206,7 +203,7 @@ public:
     bool destroy_proc_fds(proc_struct* proc);                               // 销毁进程的文件描述符表 释放相关空间资源
     file_object* get_spec_fd(proc_struct* proc, int fd_num);                // 从某个特定的fd号获取特定的文件对象 从0开始
     bool copy_proc_fds(proc_struct* dst, proc_struct* src);                 // 实现不同进程间的fd表的拷贝
-    
+
     bool start_kernel_proc(proc_struct* proc,       // 通过给定的函数启动内核线程
         int (*func)(void*), void* arg);
 
@@ -215,7 +212,7 @@ public:
 
     bool start_user_proc(proc_struct* proc,         // 通过给定的函数和用户启动地址启动用户进程
         int (*func)(void*), void* arg, uint64 user_start_addr);
-    
+
     void switch_kernel_to_user(proc_struct* proc,   // 用户执行完特定的启动函数转为用户态
         uint64 user_start_addr);
 };

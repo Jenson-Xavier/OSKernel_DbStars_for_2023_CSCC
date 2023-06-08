@@ -110,7 +110,7 @@ bool toshortname(const char* fileName, char* shortName)
 char* unicodecopy(char* dst, char* src, int len)
 {
     int re = 0;
-    kout[purple] << src << endl;
+    // kout[purple] << src << endl;
     while (re < len && src[re] != 0)
     {
         dst[2 * re] = src[re];

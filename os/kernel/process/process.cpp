@@ -7,7 +7,6 @@
 #include <fileobject.hpp>
 
 // 定义idle进程
-proc_struct* null_proc = nullptr;
 proc_struct* idle_proc = nullptr;
 
 // 定义初始化立即调度与否的变量
@@ -119,8 +118,9 @@ int ProcessManager::get_unique_pid()
         }
         sptr = sptr->next;
     }
-    for (int i = 0;i <= MAX_PID;i++)
+    for (int i = 2;i <= MAX_PID;i++)
     {
+        // 直接从2号开始找
         // 默认1号pid是分配给第1个idle boot进程
         if (st[i] == 0)
         {
@@ -284,10 +284,10 @@ bool ProcessManager::free_proc(proc_struct* proc)
     // 但是考虑到最终实现每个结构体还有很多其他分配的空间
     // 因此这一步就是执行一个安全检查并且确认对应的资源释放完毕后移除
 
-    if (proc->pid == 0)
+    if (proc->pid == 1)
     {
-        //0号的根进程不应该被free
-        kout[red] << "Zero Root Idle Process Should Not be Free!" << endl;
+        // 1号的根进程不应该被free
+        kout[red] << "Boot Idle Process Should Not be Free!" << endl;
         return false;
     }
 
@@ -764,18 +764,9 @@ bool ProcessManager::set_proc_cwd(proc_struct* proc, const char* cwd_path)
     return true;
 }
 
-void ProcessManager::init_nullproc_for_kernel()
-{
-    auto func = [](void*)->int
-    {
-        while (1);
-    };
-    null_proc = CreateKernelProcess(func, nullptr, "null_proc");
-}
-
 void ProcessManager::init_idleproc_for_boot()
 {
-    // 初始化1号boot进程 也可以认为是根进程
+    // 初始化0号boot进程 也可以认为是根进程
     // 相当于"继承"了我们的OS内核的运行
     idle_proc = alloc_proc();           // 给boot进程分配空间
     if (idle_proc == nullptr)
@@ -804,6 +795,8 @@ void ProcessManager::init_idleproc_for_boot()
     pm.set_proc_cwd(idle_proc, "/");
     fom.init_proc_fo_head(idle_proc);
     pm.init_proc_fds(idle_proc);                    // 进程文件描述符链表初始化
+    idle_proc->context = (TRAPFRAME*)((char*)idle_proc->kstack + idle_proc->kstacksize) - 1;
+    idle_proc->context->status = read_csr(sstatus);
     pm.switchstat_proc(idle_proc, Proc_running);    // 初始化完了就让这个进程一直跑起来吧
 }
 
@@ -815,16 +808,14 @@ void ProcessManager::Init()
     need_imme_run_proc = nullptr;
     need_rest = false;
 
-    // PM类的初始化主要就是初始化出 idle 1号进程
-    // 还有空转进程 这个进程是虚拟存在的 默认是0号进程
-    init_nullproc_for_kernel();
+    // PM类的初始化主要就是初始化出 idle 0号进程
     init_idleproc_for_boot();
     cur_proc = idle_proc;                           // 别忘了设置cur_proc
 
     // 输出相关信息
-    kout[green] << "ProcessManager_init Success!" << endl;
-    kout[green] << "Current Process : " << cur_proc->name << endl;
-    kout << endl;
+    // kout[green] << "ProcessManager_init Success!" << endl;
+    // kout[green] << "Current Process : " << cur_proc->name << endl;
+    // kout << endl;
 }
 
 bool ProcessManager::switchstat_proc(proc_struct* proc, uint32 tar_stat)
@@ -1212,6 +1203,14 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
         {
             if (sptr->stat == Proc_finished || sptr->stat == Proc_zombie)
             {
+                if (sptr->flags & 0b10)
+                {
+                    // 不需要自动回收
+                    // 指定手动回收
+                    sptr = sptr->next;
+                    continue;
+                }
+
                 if (sptr->fa != nullptr && sptr->fa->pid != 0)
                 {
                     // 如果当前进程存在父进程的话
@@ -1245,7 +1244,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
                         // 说明当前进程由于父子进程间的关系
                         // 仍然阻塞在信号量上
                         // 还是无法继续进行自唤醒
-                        kout[yellow] << "The process needs to wait its CHILD process!" << endl;
+                        // kout[yellow] << "The process needs to wait its CHILD process!" << endl;
                         sptr = sptr->next;
                         continue;
                     }
@@ -1270,9 +1269,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
     }
 
     // 没有return 将前一半继续遍历一次
-    // 默认是从1号boot进程开始找
-    // 如果找不到再返回空转进程
-    sptr = idle_proc;
+    sptr = proc_listhead.next;
     while (sptr != cur_proc)
     {
         if (sptr->stat == Proc_ready)
@@ -1290,7 +1287,15 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
         {
             if (sptr->stat == Proc_finished || sptr->stat == Proc_zombie)
             {
-                if (sptr->fa != nullptr && sptr->fa->pid != 1)
+                if (sptr->flags & 0b10)
+                {
+                    // 不需要自动回收
+                    // 指定手动回收
+                    sptr = sptr->next;
+                    continue;
+                }
+
+                if (sptr->fa != nullptr && sptr->fa->pid != 0)
                 {
                     // 如果父进程被回收了
                     // 我们的逻辑就是让它的所有子进程成为孤儿
@@ -1319,7 +1324,7 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
                         // 说明当前进程由于父子进程间的关系
                         // 仍然阻塞在信号量上
                         // 还是无法继续进行自唤醒
-                        kout[yellow] << "The process needs to wait its CHILD process!" << endl;
+                        // kout[yellow] << "The process needs to wait its CHILD process!" << endl;
                         sptr = sptr->next;
                         continue;
                     }
@@ -1350,12 +1355,6 @@ TRAPFRAME* ProcessManager::proc_scheduler(TRAPFRAME* context)
     }
 
     // 还没有返回 就是没有可调度进程
-    // 调度空转进程
-    cur_proc = null_proc;
-    pm.switchstat_proc(cur_proc, Proc_running);
-    cur_proc->vms->Enter();
-    return cur_proc->context;
-
     kout[red] << "No Process to Schedule!" << endl;
     return nullptr;
 }
@@ -1473,16 +1472,16 @@ void ProcessManager::exit_proc(proc_struct* proc, int ec)
 
     // 进程退出函数
     // 主要是系统调用设计需要 ec为退出码
-    if (ec != 0)
+    if (ec == -1)
     {
         // 退出码非正常
-        kout[yellow] << "The Process " << proc->pid << " exit with exit value " << ec << endl;
+        // kout[yellow] << "The Process " << proc->pid << " exit with exit value " << ec << endl;
         pm.switchstat_proc(proc, Proc_zombie);
     }
     else
     {
         // 退出码正常
-        kout[yellow] << "The process " << proc->pid << " exit successfully!" << endl;
+        //kout[yellow] << "The process " << proc->pid << " exit successfully!" << endl;
         pm.switchstat_proc(proc, Proc_finished);
     }
     proc->exit_value = ec;
@@ -1505,6 +1504,7 @@ void ProcessManager::wait_ref_proc(proc_struct* proc)
         kout[red] << "The Process has not existed!" << endl;
         return;
     }
+
     proc->wait_ref++;
 }
 
@@ -1515,6 +1515,7 @@ void ProcessManager::wait_unref_proc(proc_struct* proc)
         kout[red] << "The Process has not existed!" << endl;
         return;
     }
+
     if (proc->wait_ref < 1)
     {
         proc->wait_ref = 0;
@@ -1661,6 +1662,7 @@ bool ProcessManager::copy_proc_fds(proc_struct* dst, proc_struct* src)
     for (src_fo_ptr = src->fo_head->next;src_fo_ptr != nullptr;src_fo_ptr = src_fo_ptr->next)
     {
         file_object* new_fo = fom.duplicate_fo(src_fo_ptr);
+        fom.set_fo_fd(new_fo, src_fo_ptr->fd);
         if (new_fo == nullptr)
         {
             kout[red] << "File Object Duplicate Error!" << endl;

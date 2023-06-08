@@ -341,6 +341,18 @@ inline int64 SYS_write(int fd, void* buf, uint64 count)
         return -1;
     }
 
+    if (fd == STDOUT_FILENO)
+    {
+        VMS::EnableAccessUser();
+        for (int i = 0;i < count;i++)
+        {
+            putchar(((char*)buf)[i]);
+            // kout << (uint64)((char*)buf)[i] << endl;
+        }
+        VMS::DisableAccessUser();
+        return count;
+    }
+
     proc_struct* cur_proc = pm.get_cur_proc();
     file_object* fo = fom.get_from_fd(cur_proc->fo_head, fd);
     if (fo == nullptr)
@@ -350,7 +362,7 @@ inline int64 SYS_write(int fd, void* buf, uint64 count)
 
     // trick实现文件信息的打印
     // 向标准输出写
-    if (fd == STDOUT_FILENO || fo->tk_fd == STDOUT_FILENO)
+    if (fo->tk_fd == STDOUT_FILENO)
     {
         VMS::EnableAccessUser();
         for (int i = 0;i < count;i++)
@@ -394,8 +406,20 @@ inline int SYS_unlinkat(int dirfd, char* path, int flags)
     // flags可设置为0或AT_REMOVEDIR
     // 成功返回0 失败返回-1
 
-    // 暂时还没有实现
-    return -1;
+    proc_struct* cur_proc = pm.get_cur_proc();
+    file_object* fo_head = cur_proc->fo_head;
+    file_object* fo = fom.get_from_fd(fo_head, dirfd);
+    if (fo == nullptr)
+    {
+        return -1;
+    }
+    VMS::EnableAccessUser();
+    if (!vfsm.unlink(path, fo->file->path))
+    {
+        return -1;
+    }
+    VMS::DisableAccessUser();
+    return 0;
 }
 
 inline int SYS_mkdirat(int dirfd, const char* path, int mode)
@@ -542,8 +566,8 @@ inline int SYS_clone(TRAPFRAME* tf, int flags, void* stack, int ptid, int tls, i
         // 子进程的创建
         VMS* vms = (VMS*)kmalloc(sizeof(VMS));
         vms->init();
-        pm.set_proc_vms(create_proc, cur_proc->vms);    // !!!
-        // vms->create_from_vms(cur_proc->vms);    // 此函数还没实现!!!
+        vms->create_from_vms(cur_proc->vms);
+        pm.set_proc_vms(create_proc, vms);
         memcpy((void*)((TRAPFRAME*)((char*)create_proc->kstack + create_proc->kstacksize) - 1),
             (const char*)tf, sizeof(TRAPFRAME));
         create_proc->context = (TRAPFRAME*)((char*)create_proc->kstack + create_proc->kstacksize) - 1;
@@ -876,7 +900,7 @@ inline int SYS_uname(utsname* uts)
     strcpy(uts->sysname, "DBStars_OperatingSystem");
     strcpy(uts->nodename, "DBStars_OperatingSystem");
     strcpy(uts->release, "Debug");
-    strcpy(uts->version, "0.7");
+    strcpy(uts->version, "1.0");
     strcpy(uts->machine, "RISCV 64");
     strcpy(uts->domainname, "DBStars");
     VMS::DisableAccessUser();
@@ -944,9 +968,9 @@ inline int SYS_nanosleep(timespec* req, timespec* rem)
     clock_t wait_time = 0;          // 计算qemu上需要等待的时钟滴答数
     VMS::EnableAccessUser();
     wait_time = req->tv_sec * timer_1s +
-        req->tv_nsec / (long)1e6 * timer_1ms +
-        req->tv_nsec % (long)1e6 / 1e3 * timer_1us +
-        req->tv_nsec % (long)1e3 * timer_1ns;
+        req->tv_nsec / 1000000 * timer_1ms +
+        req->tv_nsec % 1000000 / 1000 * timer_1us +
+        req->tv_nsec % 1000 * timer_1ns;
     rem->tv_sec = rem->tv_nsec = 0;
     VMS::DisableAccessUser();
     semaphore.wait(cur_proc);       // 当前进程在semaphore上等待 切换为sleeping态

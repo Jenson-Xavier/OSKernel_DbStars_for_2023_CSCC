@@ -1,4 +1,3 @@
-
 //#include "include/types.h"
 //#include "include/param.h"
 //#include "include/memlayout.h"
@@ -12,9 +11,9 @@
 #include <sbi.h>
 
 unsigned long long cpuid()
-{
+{	
   unsigned long long id;
-  asm volatile("mv %0,tp":"=r"(id));
+	asm volatile("mv %0,tp":"=r"(id));
   return 0;
 }
 

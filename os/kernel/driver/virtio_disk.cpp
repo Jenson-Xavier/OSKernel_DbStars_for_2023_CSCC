@@ -51,7 +51,7 @@ static struct disk
   {
     //    struct buf *b;
     Uint8* buf;
-    SEMAPHORE* sem = nullptr;
+    int flag;
     char status;
   } info[NUM];
 
@@ -199,9 +199,10 @@ alloc3_desc(int* idx)
 void virtio_disk_rw(Uint8* buf, uint64 sector, int write)
 {
   //  uint64 sector = b->sectorno;
-
+  bool a;
+  intr_save(a);
   //  acquire(&disk.vdisk_lock);
-  disk.lock.lock();
+  // disk.lock.lock();
   // the spec says that legacy block operations use three
   // descriptors: one for type/reserved/sector, one for
   // the data, one for a 1-byte status result.
@@ -214,10 +215,9 @@ void virtio_disk_rw(Uint8* buf, uint64 sector, int write)
     {
       break;
     }
-    disk.lock.unlock();
-    pm.set_waittime_limit(pm.get_cur_proc(), 18446744073709551615);
+    // disk.lock.unlock();
     disk.sem->wait();
-    disk.lock.lock();
+    // disk.lock.lock();
   }
 
   // format the three descriptors.
@@ -258,11 +258,7 @@ void virtio_disk_rw(Uint8* buf, uint64 sector, int write)
     disk.desc[idx[2]].flags = VRING_DESC_F_WRITE; // device writes the status
     disk.desc[idx[2]].next = 0;
 
-    if (disk.info[idx[0]].sem == nullptr)
-    {
-      disk.info[idx[0]].sem = new SEMAPHORE;
-      disk.info[idx[0]].sem->init();
-    }
+    disk.info[idx[0]].flag = 0;
     disk.info[idx[0]].buf = buf;
   }
   // avail[1] tells the device how far to look in avail[2...].
@@ -273,7 +269,7 @@ void virtio_disk_rw(Uint8* buf, uint64 sector, int write)
     __sync_synchronize();
     disk.avail[1] = disk.avail[1] + 1;
 
-    disk.lock.unlock();
+    // disk.lock.unlock();
     //	while (disk.info[idx[0]].sem->Value()!=0)
     //		kout[Fault]<<POS_PM.Current()->GetPID()<<" sem "<<disk.info[idx[0]].sem<<" "<<disk.info[idx[0]].sem->Value()<<" | "<<buf<<" "<<sector<<endl;
 
@@ -284,15 +280,22 @@ void virtio_disk_rw(Uint8* buf, uint64 sector, int write)
     //    sleep(b, &disk.vdisk_lock);
     //  }
     //	kout[Debug]<<POS_PM.Current()->GetPID()<<" Wait "<<disk.info[idx[0]].sem<<" | "<<buf<<" "<<sector<<endl;
-    pm.set_waittime_limit(pm.get_cur_proc(), 18446744073709551615);
-    disk.info[idx[0]].sem->wait();
-    disk.lock.lock();
+
+    disk.info[idx[0]].flag = 1;
+    interrupt_enable();
+    while (disk.info[idx[0]].flag)
+    {
+    }
+
+    interrupt_disable();
+    // disk.lock.lock();
 
     // kout[Debug]<<"Wait OK"<<endl;
 
     //  disk.info[idx[0]].b = 0;
     free_chain(idx[0]);
-    disk.lock.unlock();
+    // disk.lock.unlock();
+    intr_restore(a);
     //  release(&disk.vdisk_lock);
 
     //	for (int i=0;i<=1e4;++i);//Debug...
@@ -302,7 +305,7 @@ void virtio_disk_rw(Uint8* buf, uint64 sector, int write)
 void virtio_disk_intr()
 {
 
-  disk.lock.lock();
+  // disk.lock.lock();
   while ((disk.used_idx % NUM) != (disk.used->id % NUM))
   {
     int id = disk.used->elems[disk.used_idx].id;
@@ -311,12 +314,13 @@ void virtio_disk_intr()
     for (i = 0; disk.info[id].status != 0 && i <= 10; ++i)
       if (i >= 100)
         kout[red] << "virtio_disk_intr status " << (int)disk.info[id].status << endl;
-    disk.info[id].sem->signal();
+    disk.info[id].flag = 0;
 
     disk.used_idx = (disk.used_idx + 1) % NUM;
   }
   *R(VIRTIO_MMIO_INTERRUPT_ACK) = *R(VIRTIO_MMIO_INTERRUPT_STATUS) & 0x3;
-  disk.lock.unlock();
+
+  // disk.lock.unlock();
 }
 
 extern "C"
@@ -326,18 +330,17 @@ extern "C"
 
 bool DiskInit()
 {
-  kout[yellow] << "Disk init..." << endl;
-  kout[yellow] << "plic init..." << endl;
+  // kout[yellow] << "Disk init..." << endl;
+  // kout[yellow] << "plic init..." << endl;
   // kout[red]<<Hex(f())<<endl;
   plicinit();
 
-  kout[yellow] << "plic init hart..." << endl;
+  // kout[yellow] << "plic init hart..." << endl;
   plicinithart();
-  kout[yellow] << "VirtIO disk init..." << endl;
+  // kout[yellow] << "VirtIO disk init..." << endl;
   virtio_disk_init();
 
-  kout[yellow] << "Disk init OK!" << endl;
-  kout << endl;
+  // kout[yellow] << "Disk init OK" << endl;
   return true;
 }
 

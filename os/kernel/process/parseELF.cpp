@@ -90,13 +90,14 @@ int start_process_formELF(void* userdata)
             vmr_flags |= 0b1;
         }
         vmr_flags |= 0b10;
+        
         // 权限统计完 可以在进程的虚拟空间中加入这一片VMR区域了
         // 这边使用的memsz信息来作为vmr的信息
         // 输出提示信息
         uint64 vmr_begin = pgm_hdr.p_vaddr;
         uint64 vmr_memsize = pgm_hdr.p_memsz;
         uint64 vmr_end = vmr_begin + vmr_memsize;
-        kout[green] << "Add VMR from " << vmr_begin << " to " << vmr_end << endl;
+        // kout[green] << "Add VMR from " << vmr_begin << " to " << vmr_end << endl;
 
         VMR* vmr_add = (VMR*)kmalloc(sizeof(VMR));
         vmr_add->Init(vmr_begin, vmr_end, vmr_flags);
@@ -166,8 +167,8 @@ proc_struct* CreateProcessFromELF(file_object* fo, const char* wk_dir, int proc_
 
     if (rd_size != sizeof(proc_data->e_header) || !proc_data->e_header.is_ELF())
     {
-        kout[red] << "Create Process from ELF Error!" << endl;
-        kout[red] << "Read File is NOT ELF!" << endl;
+        // kout[red] << "Create Process from ELF Error!" << endl;
+        // kout[red] << "Read File is NOT ELF!" << endl;
         kfree(proc_data);
         return nullptr;
     }

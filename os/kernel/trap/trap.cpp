@@ -72,6 +72,7 @@ void trap_fail_info(TRAPFRAME* tf)
     kout[green] << "tval:" << Hex(tf->badvaddr) << endl;
     kout[green] << "status:" << Hex(tf->status) << endl;
     kout[green] << "epc:" << Hex(tf->epc) << endl;
+    sbi_shutdown();
 }
 
 extern "C"
@@ -188,13 +189,15 @@ extern "C"
                 case 1:
                     // 执行ebreak调用触发断点异常 从而实现内核进程退出的回收
                     // 通过内联汇编已经将参数中的a7寄存器设置为1
-                    kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " and Exit!" << endl;
+                    // kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " and Exit!" << endl;
                     // pm.print_all_list();
                     return pm.proc_scheduler(tf);
                 case 2:
                     // 为2时表示在S态将从特定函数启动的用户进程转为用户态并进行一次调度
-                    kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " switch to U!" << endl;
+                    // kout[blue] << "Current Process's PID is " << pm.get_cur_proc()->pid << " switch to U!" << endl;
                     // kout[purple] << pm.get_cur_proc()->context->status << endl;
+                    return pm.proc_scheduler(tf);
+                case 3:
                     return pm.proc_scheduler(tf);
                 }
                 break;
@@ -225,8 +228,9 @@ extern "C"
                 // kout[yellow] << "PAGE_FAULT" << endl;
                 if (!trap_PageFault(tf))
                 {
-                    trap_fail_info(tf);
+                    // trap_fail_info(tf);
                     pm.exit_proc(pm.get_cur_proc(), -1);
+                    sbi_shutdown();
                 }
                 break;
             default:

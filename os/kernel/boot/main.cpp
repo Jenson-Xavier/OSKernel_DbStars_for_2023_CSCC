@@ -567,24 +567,69 @@ void test_filevfsm()
 
 void test_elfparse()
 {
-    // vfsm.create_dir("/", "/", "test_mkdir");
-    // FAT32FILE* ft = vfsm.open("/mnt", "/");
-    // ft->show();
+    char test_names[50][20];
+    strcpy(test_names[0], "/brk");
+    strcpy(test_names[1], "/chdir");
+    strcpy(test_names[2], "/clone");
+    strcpy(test_names[3], "/close");
+    strcpy(test_names[4], "/dup");
+    strcpy(test_names[5], "/dup2");
+    strcpy(test_names[6], "/execve");
+    strcpy(test_names[7], "/exit");
+    strcpy(test_names[8], "/fork");
+    strcpy(test_names[9], "/fstat");
+    strcpy(test_names[10], "/getcwd");
+    strcpy(test_names[11], "/getdents");
+    strcpy(test_names[12], "/getpid");
+    strcpy(test_names[13], "/getppid");
+    strcpy(test_names[14], "/gettimeofday");
+    strcpy(test_names[15], "/mkdir_");
+    strcpy(test_names[16], "/mmap");
+    strcpy(test_names[17], "/mount");
+    strcpy(test_names[18], "/munmap");
+    strcpy(test_names[19], "/open");
+    strcpy(test_names[20], "/openat");
+    strcpy(test_names[21], "/read");
+    strcpy(test_names[22], "/sleep");
+    strcpy(test_names[23], "/times");
+    strcpy(test_names[24], "/umount");
+    strcpy(test_names[25], "/uname");
+    strcpy(test_names[26], "/unlink");
+    strcpy(test_names[27], "/wait");
+    strcpy(test_names[28], "/waitpid");
+    strcpy(test_names[29], "/write");
+    strcpy(test_names[30], "/yield");
 
     file_object* fo = (file_object*)kmalloc(sizeof(file_object));
-    FAT32FILE* file = vfsm.open("/brk", ".");
+    for (int i = 0;i < 31;i++)
+    {
+        if (i == 1 || i == 16 || i == 18 || i == 26) continue;
+        FAT32FILE* file = vfsm.open(test_names[i], ".");
 
-    // unsigned char rd[10000];
-    // file->read(rd, 4096, 4096);
-    // for (int i = 0;i < 4096;i++)
-    // {
-    //     kout << i << ": " << Hex((uint8)rd[i]) << endl;
-    // }
-    fom.set_fo_file(fo, file);
-    CreateProcessFromELF(fo, "/");
+        // file->show();
+        // if (file->fat)
+        // {
+        //     kout[yellow] << "abc" << endl;
+        // }
+
+        fom.set_fo_file(fo, file);
+        fom.set_fo_pos_k(fo, 0);
+        CreateProcessFromELF(fo, "/", 0);
+        int n = 1e9;
+        while (n--);
+    }
 }
 
-void test_VirtIO()
+void test_specfile()
+{
+    file_object* fo = (file_object*)kmalloc(sizeof(file_object));
+    FAT32FILE* file = vfsm.open("/openat", ".");
+    fom.set_fo_file(fo, file);
+    fom.set_fo_pos_k(fo, 0);
+    CreateProcessFromELF(fo, "/", 0);
+}
+
+void TestVirtIO()
 {
     for (int i = 0; i < 0x300000; i += 512)
     {
@@ -606,53 +651,199 @@ void test_VirtIO()
         ;
 }
 
-void test_filedriver()
+void test_final()
 {
-    // VMS::GetKernelVMS()->show();
-    // char * a=(char *)0xffffffff82000000;
-    // kout.memory(a,32);
+    file_object* fo = (file_object*)kmalloc(sizeof(file_object));
+    FAT32FILE* file;
+    proc_struct* test;
+    file = vfsm.get_next_file(vfsm.get_root());
+    while (file)
+    {
+        // file->show();
+        if (file->TYPE == FAT32FILE::__DIR)
+        {
+            file = vfsm.get_next_file(vfsm.get_root(), file);
+            continue;
+        }
+        fom.set_fo_file(fo, file);
+        fom.set_fo_pos_k(fo, 0);
+        test = CreateProcessFromELF(fo, "/", 0);
+        if (test != nullptr)
+        {
+            proc_struct* cur_proc = pm.get_cur_proc();
+            proc_struct* child = nullptr;
+            while (1)
+            {
+                proc_struct* pptr = nullptr;
+                for (pptr = cur_proc->fir_child;pptr;pptr = pptr->bro_next)
+                {
+                    if (pptr->stat == Proc_finished && pptr->pid == test->pid)
+                    {
+                        child = pptr;
+                        break;
+                    }
+                }
+                if (child == nullptr)
+                {
+                    cur_proc->sem->wait(cur_proc);
+                }
+                else
+                {
+                    pm.free_proc(child);
+                    break;
+                }
+            }
+        }
+        file = vfsm.get_next_file(vfsm.get_root(), file);
+    }
+}
 
-    // test_VirtIO();
-    // test_filevfsm();
+void test_final1()
+{
+    file_object* fo = (file_object*)kmalloc(sizeof(file_object));
+    FAT32FILE* file;
+    proc_struct* test;
+    file = vfsm.get_next_file(vfsm.get_root());
+    int test_cnt = 0;
+    while (file)
+    {
+        // file->show();
+        if (file->table.size == 0)
+        {
+            file = vfsm.get_next_file(vfsm.get_root(), file);
+            continue;
+        }
+        if (file->TYPE == FAT32FILE::__DIR)
+        {
+            file = vfsm.get_next_file(vfsm.get_root(), file);
+            continue;
+        }
 
-    // kout[red]<<re<<endl;
-    // kout.memory(t,100);
-    // kout[green]<<vfsm.get_root()->fat->clus_to_lba(2);
+        fom.set_fo_file(fo, file);
+        fom.set_fo_pos_k(fo, 0);
+        test = CreateProcessFromELF(fo, "/", 0b10); // 0b10的标志位表示不让调度器进行回收 在主函数手动回收
+        if (test != nullptr)
+        {
+            while (1)
+            {
+                if (test->stat == Proc_finished || test->stat == Proc_zombie)
+                {
+                    pm.free_proc(test);
+                    test = nullptr;
+                    break;
+                }
+            }
+        }
+        file = vfsm.get_next_file(vfsm.get_root(), file);
+        if (++test_cnt >= 40)
+        {
+            break;
+        }
+    }
+}
 
-    // kout[red]<<vfsm.get_root()->fat->get_next_clus(2)<<endl;
-    // kout.memory(t,100);
-    // kout.memory(t,100);
-    // for (int i = 0; i < 10; i++)
+void test_final2()
+{
+    // char test_names[50][20];
+    // memset(test_names, 0, sizeof(test_names));
+    // strcpy(test_names[0], "/brk");
+    // strcpy(test_names[1], "/chdir");
+    // strcpy(test_names[2], "/clone");
+    // strcpy(test_names[3], "/close");
+    // strcpy(test_names[4], "/dup");
+    // strcpy(test_names[5], "/dup2");
+    // strcpy(test_names[6], "/execve");
+    // strcpy(test_names[7], "/exit");
+    // strcpy(test_names[8], "/fork");
+    // strcpy(test_names[9], "/fstat");
+    // strcpy(test_names[10], "/getcwd");
+    // strcpy(test_names[11], "/getdents");
+    // strcpy(test_names[12], "/getpid");
+    // strcpy(test_names[13], "/getppid");
+    // strcpy(test_names[14], "/gettimeofday");
+    // strcpy(test_names[15], "/mkdir_");
+    // strcpy(test_names[16], "/mmap");
+    // strcpy(test_names[17], "/mount");
+    // strcpy(test_names[18], "/munmap");
+    // strcpy(test_names[19], "/open");
+    // strcpy(test_names[20], "/openat");
+    // strcpy(test_names[21], "/read");
+    // strcpy(test_names[22], "/sleep");
+    // strcpy(test_names[23], "/times");
+    // strcpy(test_names[24], "/umount");
+    // strcpy(test_names[25], "/uname");
+    // strcpy(test_names[26], "/unlink");
+    // strcpy(test_names[27], "/wait");
+    // strcpy(test_names[28], "/waitpid");
+    // strcpy(test_names[29], "/write");
+    // strcpy(test_names[30], "/yield");
+
+    file_object* fo = (file_object*)kmalloc(sizeof(file_object));
+    FAT32FILE* file;
+    proc_struct* test;
+
+    // for (int i = 0;i < 31;i++)
     // {
-    // kout<<t[i]<<' ';
-    // }
+    file = vfsm.open("/waitpid", "/");
+    fom.set_fo_file(fo, file);
+    fom.set_fo_pos_k(fo, 0);
+    test = CreateProcessFromELF(fo, "/", 0b10);
+    if (test != nullptr)
+    {
+        while (1)
+        {
+            if (test->stat == Proc_finished || test->stat == Proc_zombie)
+            {
+                pm.free_proc(test);
+                test = nullptr;
+                break;
+            }
+        }
+    }
 
-    // kout[red] << "SDSD" << endl;
-    // test_filevfsm();
+    file = vfsm.open("/yield", "/");
+    fom.set_fo_file(fo, file);
+    fom.set_fo_pos_k(fo, 0);
+    test = CreateProcessFromELF(fo, "/", 0b10);
+    if (test != nullptr)
+    {
+        while (1)
+        {
+            if (test->stat == Proc_finished || test->stat == Proc_zombie)
+            {
+                pm.free_proc(test);
+                test = nullptr;
+                break;
+            }
+        }
+    }
+    // }
 }
 
 int main()
 {
-    kout << endl;
-    kout[purple] << "Hello World,OS Kernel!" << endl;
-    kout << endl;
-
-    kout[red] << "clock_init!" << endl;
+    // kout << endl;
+    // kout[purple] << "Hello World,OS Kernel!" << endl;
+    // kout << endl;
+    // kout[red] << "clock_init!" << endl;
     clock_init();
-    kout[red] << "trap_init!" << endl;
+    // kout[red] << "trap_init!" << endl;
     trap_init();
-    kout[red] << "interrupt_enable!" << endl;
+    // kout[red] << "interrupt_enable!" << endl;
     interrupt_enable();
-    kout << endl;
-
+    // kout << endl;
     pmm.Init();
     VMS::Static_Init();
     pm.Init();
-    
     DiskInit();
     vfsm.init();
+    // kout << endl;
 
-    test_elfparse();
+    // test_more_user_img_process();
+    // test_specfile();
+
+    test_final1();
+    sbi_shutdown();
 
     while (1)
     {

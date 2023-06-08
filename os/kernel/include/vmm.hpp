@@ -11,7 +11,7 @@
 #define PhysiclaVirtualMemoryOffset 0xffffffff00000000
 #define ENTRYCOUNT 512
 
-#define QEMU                                            // 现在在QEMU上进行 宏定义 让内核允许访问用户空间       
+#define QEMU // 现在在QEMU上进行 宏定义 让内核允许访问用户空间
 
 // 区分三种地址：
 //  1、物理地址:只有ENTRY和satp中使用
@@ -20,12 +20,12 @@
 
 inline void* K2PAddr(void* Kaddr)
 {
-    return (void*)((uint64)Kaddr + PhysiclaVirtualMemoryOffset);
+    return (void*)((uint64)Kaddr - PhysiclaVirtualMemoryOffset);
 }
 
 inline void* P2KAddr(void* Paddr)
 {
-    return (void*)(((uint64)(Paddr)) - PhysiclaVirtualMemoryOffset);
+    return (void*)(((uint64)(Paddr)) + PhysiclaVirtualMemoryOffset);
 }
 
 class VMS;
@@ -64,7 +64,13 @@ union ENTRY
         re.page_table_entry = ((uint64(addr) >> 12) << 10) + Res;
         return re;
     }
-
+    inline void* get_ref_page()
+    {
+        if (is_leaf())
+        {
+            return (void*)((get_PNN() << 12) + PhysiclaVirtualMemoryOffset);
+        }
+    }
     inline uint64 get_PNN()
     {
         return (page_table_entry << 10) >> 20;
@@ -105,12 +111,12 @@ private:
 
 public:
     bool Init(bool isRoot = false);
-    bool Destroy();                                     // 销毁之后只是物理内存将其释放
+    bool Destroy(); // 销毁之后只是物理内存将其释放
 
     void show();
-    bool del(uint64 start, uint64 end, uint8 level);    // 必须和页框对齐,实现遇到困难，暂时停止
+    bool del(uint64 start, uint64 end, uint8 level); // 必须和页框对齐,实现遇到困难，暂时停止
 
-    inline void* PAddr()                                // 因为物理内存管理器不通过sv39返回
+    inline void* PAddr() // 因为物理内存管理器不通过sv39返回
     {
         return (void*)((uint64)this - PhysiclaVirtualMemoryOffset);
     }
@@ -136,7 +142,7 @@ union VMR_FLAG
         unsigned int Device : 1;
         unsigned int File : 1;
         unsigned int Dynamic : 1;
-        unsigned int reserve : 22;                      // 用于自己定制
+        unsigned int reserve : 22; // 用于自己定制
     };
 };
 
@@ -157,9 +163,10 @@ enum VMR_flags
 class VMR
 {
     friend class VMS;
+
 protected:
     VMR_FLAG flag;
-    uint64 start, end;                                  // 存储的是物理地址
+    uint64 start, end; // 存储的是物理地址
     VMR* pre;
     VMR* next;
 
@@ -191,7 +198,7 @@ public:
 class VMS
 {
 private:
-    static VMS* KernelVMS;                              // 用于管理内核的空间
+    static VMS* KernelVMS; // 用于管理内核的空间
     static VMS* CurVMS;
 
     VMR* Head;
@@ -201,19 +208,19 @@ private:
 
 public:
     void insert(VMR* tar);
-    VMR* insert(uint64  start, uint64 end, uint32 flag);
+    VMR* insert(uint64 start, uint64 end, uint32 flag);
     bool del(bool (*p)(VMR* tar));
     bool del(VMR* tar);
     VMR* find(void* addr);
 
-    void ref();                             // 和进程相关的引用解引用
+    void ref(); // 和进程相关的引用解引用
     void unref();
 
     bool init();
-    bool clear();                           // 清除VMR List,清除前确保只有一个进程在使用该空间
-    bool destroy();                         // 删除VMS
+    bool clear();   // 清除VMR List,清除前确保只有一个进程在使用该空间
+    bool destroy(); // 删除VMS
 
-    static bool Static_Init();              // 初始化内核空间时使用
+    static bool Static_Init(); // 初始化内核空间时使用
 
     inline VMR* GetVMRHead()
     {
@@ -263,12 +270,11 @@ public:
 #endif
     }
 
-    void create_from_vms(VMS* vms);         // 进程间的拷贝需要 新建一个vms但是内容拷贝至其他的vms.需确保VMS为新建
-    PAGETABLE * copy_PDT(PAGETABLE * pdt,int i);    //i为0表示在根节点
+    void create_from_vms(VMS* vms);             // 进程间的拷贝需要 新建一个vms但是内容拷贝至其他的vms.需确保VMS为新建
+    PAGETABLE* copy_PDT(PAGETABLE* src, int32 end); // i为0表示在根节点,end表示页表结尾
 
-
-    void Enter();                           // 将当前空间切换到该实例所表示的空间
-    void Leave();                           // 切换到内核空间
+    void Enter(); // 将当前空间切换到该实例所表示的空间
+    void Leave(); // 切换到内核空间
 
     void show();
 
@@ -281,23 +287,23 @@ using size_t = long unsigned int;
 
 void* operator new(size_t size);
 void* operator new[](size_t size);
-void  operator delete(void* p, uint64 size);
-void  operator delete[](void* p);
+void operator delete(void* p, uint64 size);
+void operator delete[](void* p);
 
 // HMR 即 HeapMemoryRegion
 // 主要是为了实现用户进程的堆段区 即数据段
 // 进而实现brk这样需要修改数据段的系统调用
 // 本质也是一个VMR结构 使用继承VMR的方式即可
-class HMR :public VMR
+class HMR : public VMR
 {
 protected:
-    uint64 breakpoint_length = 0;                       // 断点长度
+    uint64 breakpoint_length = 0; // 断点长度
 
 public:
     inline uint64 breakpoint()
     {
         // 返回断点的地址
-        return start + breakpoint_length;               // start即VMR的起始地址
+        return start + breakpoint_length; // start即VMR的起始地址
     }
 
     inline bool resize(int64 delta)
@@ -314,7 +320,7 @@ public:
                 // 需要调整
                 if (next == nullptr || start + breakpoint_length <= next->GetStart())
                 {
-                    end = start + breakpoint_length + PAGESIZE - 1 >> 12 << 12;     // 2^12=4096(PAGESIZE) 对齐处理
+                    end = start + breakpoint_length + PAGESIZE - 1 >> 12 << 12; // 2^12=4096(PAGESIZE) 对齐处理
                 }
                 else
                 {
@@ -336,7 +342,7 @@ public:
             else
             {
                 breakpoint_length += delta;
-                end = start + breakpoint_length + PAGESIZE - 1 >> 12 << 12;         // 更新end并对齐
+                end = start + breakpoint_length + PAGESIZE - 1 >> 12 << 12; // 更新end并对齐
             }
         }
         return true;

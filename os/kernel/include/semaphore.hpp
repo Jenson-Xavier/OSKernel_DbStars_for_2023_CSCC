@@ -67,7 +67,7 @@ public:
     void init(int init_val = 0);                            // 初始化信号量初值 可以指定值 默认为0
     // 目前仅考虑单核CPU下的OS内核 故默认参数可以认为是当前执行的进程
     int wait(proc_struct* proc = pm.get_cur_proc());        // 信号量的经典操作 semWait
-    void signal();                                          // 信号量的经典操作 semSignal
+    void signal(proc_struct* proc = pm.get_cur_proc());     // 信号量的经典操作 semSignal
     bool destroy();                                         // 为单独的进程设计需要 释放信号量上相应的空间
 };
 

@@ -147,14 +147,60 @@ void test_execve(void)
     execve("/test_echo", newargv, newenviron);
 }
 
-int main(void) {
-    test_clone();
+int test_yield()
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        if (fork() == 0)
+        {
+            for (int j = 0; j < 5; ++j)
+            {
+                sched_yield();
+                u_puts("I am child process: iteration");
+                u_puts(getpid());
+                u_puts(i);
+            }
+            u_exit(0);
+        }
+    }
+    wait(nullptr);
+    wait(nullptr);
+    wait(nullptr);
+}
+
+int i = 1000;
+void test_waitpid(void) {
+    int cpid, wstatus;
+    cpid = fork();
+    if (cpid == 0)
+    {
+        while (i--);
+        sched_yield();
+        u_puts("This is child process");
+        u_exit(3);
+    }
+    else
+    {
+        int ret = waitpid(cpid, &wstatus, 0);
+        if (ret == cpid && wstatus == 3)
+            u_puts("waitpid successfully");
+        else
+            u_puts("waitpid error");
+
+    }
+}
+
+int main(void)
+{
+    // test_clone();
     // test_getpid();
     // test_getppid();
     // test_times();
     // test_uname();
     // test_sleep();
     // test_execve();
+    test_yield();
+    //test_waitpid();
     
     return 0;
 }
